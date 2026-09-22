@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE DataSet SYSTEM "gdpdu-01-03-2019.dtd">
+<DataSet>
+  <Version>1.0</Version>
+  <DataSupplier>
+    <Name>Beispiel AG</Name>
+    <Location>Musterstadt</Location>
+    <Comment>Testdatensatz</Comment>
+  </DataSupplier>
+  <Media>
+    <Name>Disk 1</Name>
+    <Table>
+      <URL>kunden.csv</URL>
+      <Name>Kunden</Name>
+      <Description>Stammdaten der Kunden</Description>
+      <UTF8/>
+      <DecimalSymbol>,</DecimalSymbol>
+      <DigitGroupingSymbol>.</DigitGroupingSymbol>
+      <VariableLength>
+        <VariablePrimaryKey>
+          <Name>Kunden-Code</Name>
+          <AlphaNumeric/>
+          <MaxLength>10</MaxLength>
+        </VariablePrimaryKey>
+        <VariableColumn>
+          <Name>Firma</Name>
+          <AlphaNumeric/>
+        </VariableColumn>
+      </VariableLength>
+    </Table>
+    <Table>
+      <URL>data/bestellungen.csv</URL>
+      <Name>Bestellungen</Name>
+      <UTF8/>
+      <VariableLength>
+        <VariableColumn>
+          <Name>Kunden-Code</Name>
+          <AlphaNumeric/>
+        </VariableColumn>
+        <VariableColumn>
+          <Name>Bestelldatum</Name>
+          <Date><Format>YYYYMMDD</Format></Date>
+        </VariableColumn>
+        <VariableColumn>
+          <Name>Frachtkosten</Name>
+          <Numeric><Accuracy>2</Accuracy></Numeric>
+        </VariableColumn>
+        <ForeignKey>
+          <Name>Kunden-Code</Name>
+          <References>Kunden</References>
+        </ForeignKey>
+      </VariableLength>
+    </Table>
+  </Media>
+</DataSet>

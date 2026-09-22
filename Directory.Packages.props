@@ -1,0 +1,28 @@
+<Project>
+  <PropertyGroup>
+    <!-- One version per package for the whole repository. A version belongs here and nowhere
+         else: two projects that disagree about xunit.v3 or Avalonia build against different
+         assemblies, and while the versions are spread across project files that disagreement is
+         invisible until something fails in one project and not the other. A project says which
+         packages it needs; this file says which versions they are. -->
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- The Avalonia packages are one release and move together: mixing versions across them is
+         not supported, and Avalonia.Headless has to match what the reader itself is built on. -->
+    <PackageVersion Include="Avalonia" Version="12.1.2" />
+    <PackageVersion Include="Avalonia.Desktop" Version="12.1.2" />
+    <PackageVersion Include="Avalonia.Headless" Version="12.1.2" />
+    <PackageVersion Include="Avalonia.Themes.Fluent" Version="12.1.2" />
+    <PackageVersion Include="DuckDB.NET.Data.Full" Version="1.5.5" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Testing. Both test projects run on the Microsoft Testing Platform, so they must agree on
+         xunit.v3 and its runner exactly. -->
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.10.0" />
+    <PackageVersion Include="Microsoft.Testing.Extensions.CodeCoverage" Version="18.11.2" />
+    <PackageVersion Include="Shouldly" Version="4.3.0" />
+    <PackageVersion Include="xunit.runner.visualstudio" Version="4.0.0" />
+    <PackageVersion Include="xunit.v3" Version="4.0.1" />
+  </ItemGroup>
+</Project>

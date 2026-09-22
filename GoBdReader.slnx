@@ -1,0 +1,12 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/GoBd.Validation.Cli/GoBd.Validation.Cli.csproj" />
+    <Project Path="src/GoBd.Validation/GoBd.Validation.csproj" />
+    <Project Path="src/GoBd.Reader.Data/GoBd.Reader.Data.csproj" />
+    <Project Path="src/GoBd.Reader.Ui/GoBd.Reader.Ui.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/GoBd.Validation.Tests/GoBd.Validation.Tests.csproj" />
+    <Project Path="tests/GoBd.Reader.Ui.Tests/GoBd.Reader.Ui.Tests.csproj" />
+  </Folder>
+</Solution>

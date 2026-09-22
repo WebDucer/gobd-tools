@@ -1,0 +1,44 @@
+<Project>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <!-- Every warning is an error, from every source: the compiler, MSBuild itself, NuGet
+         restore, and the analyzers. Nothing is allowed to accumulate as "just a warning". -->
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <MSBuildTreatWarningsAsErrors>true</MSBuildTreatWarningsAsErrors>
+    <WarningsNotAsErrors></WarningsNotAsErrors>
+    <NoWarn></NoWarn>
+    <WarningLevel>9999</WarningLevel>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+    <!-- Deployment choice, not a correctness mechanism: keeps the published binary free of a
+         libicu dependency, which a non-invariant process needs at startup on Linux. Correctness
+         comes from the analyzer rules below. See design.md D8. -->
+    <EnableNETAnalyzers>true</EnableNETAnalyzers>
+    <AnalysisMode>Default</AnalysisMode>
+    <!-- Symbols travel inside each assembly rather than beside it. A single-file build has nothing
+         beside it to carry them, and a stack trace from an auditor's machine should still name the
+         file and line. See the change's design.md D5. -->
+    <DebugType>embedded</DebugType>
+    <!-- A build that is not made for a release tag reports 0.0.0.0, so that it can never pass for
+         a release. A release build passes -p:ReleaseTag=v<major>[.<minor>[.<patch>]], and
+         ComputeReleaseVersion in Directory.Build.targets derives the version from it. See the
+         prepare-public-release change's design.md D1. -->
+    <Version>0.0.0</Version>
+  </PropertyGroup>
+
+  <!-- Invariant globalization is requested through the runtime host option rather than the
+       InvariantGlobalization MSBuild property: the property makes the netanalyzers self-suppress
+       CA1304/CA1305/CA1307/CA1310, which are our actual correctness guarantee. See design.md D8. -->
+  <ItemGroup>
+    <RuntimeHostConfigurationOption Include="System.Globalization.Invariant" Value="true" Trim="true" />
+    <!-- A Table may declare UTF7 as its codepage, and .NET disables UTF-7 by default because
+         decoding it in a markup context is a security hazard. Nothing here interprets a decoded
+         value as markup: values become findings and grid cells. Refusing to read a legally
+         declared codepage would be the worse answer. -->
+    <RuntimeHostConfigurationOption Include="System.Text.Encoding.EnableUnsafeUTF7Encoding" Value="true" Trim="false" />
+  </ItemGroup>
+
+</Project>

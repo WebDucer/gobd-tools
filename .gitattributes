@@ -1,0 +1,8 @@
+# The Beschreibungsstandard grammar is embedded in the binary and its exact bytes are pinned by
+# CanonicalDtd.ExpectedSha256. Line-ending conversion on commit would change those bytes and the
+# self-check would then refuse to run. Treating it as binary removes the possibility entirely.
+*.dtd binary
+
+# Fixture exports are compared byte for byte by the DTD-copy tests; normalising them would make
+# those tests assert something other than what they claim.
+tests/GoBd.Validation.Tests/Fixtures/** binary

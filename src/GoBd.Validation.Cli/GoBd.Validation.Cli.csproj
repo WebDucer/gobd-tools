@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>GoBd.Validation.Cli</RootNamespace>
+    <AssemblyName>gobd-validate</AssemblyName>
+    <PublishAot>true</PublishAot>
+    <IsPackable>false</IsPackable>
+    <!-- Names the validator on Windows. See the repackage-reader change's design.md D9. -->
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <!-- Enforced by Directory.Build.targets: no path to the native store, direct or transitive. -->
+    <ForbidsNativeStore>true</ForbidsNativeStore>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\GoBd.Validation\GoBd.Validation.csproj" />
+  </ItemGroup>
+
+</Project>

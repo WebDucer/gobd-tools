@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE DataSet SYSTEM "gdpdu-01-03-2019.dtd">
+<DataSet>
+  <Version>1.0</Version>
+  <DataSupplier>
+    <Name>Beispiel AG</Name>
+    <Location>Musterstadt</Location>
+    <Comment>Deliberately defective export, used by the end-to-end test.</Comment>
+  </DataSupplier>
+  <Media>
+    <Name>Disk 1</Name>
+    <Table>
+      <URL>kunden.csv</URL>
+      <Name>Kunden</Name>
+      <VariableLength>
+        <VariablePrimaryKey>
+          <Name>Id</Name>
+          <AlphaNumeric/>
+        </VariablePrimaryKey>
+      </VariableLength>
+    </Table>
+    <Table>
+      <!-- This file is not in the export: GOBD1003 -->
+      <URL>bestellungen.csv</URL>
+      <Name>Bestellungen</Name>
+      <VariableLength>
+        <VariableColumn>
+          <Name>Id</Name>
+          <AlphaNumeric/>
+        </VariableColumn>
+        <!-- KundenCode is never declared as a column: GOBD3001 -->
+        <ForeignKey>
+          <Name>KundenCode</Name>
+          <References>Kunden</References>
+        </ForeignKey>
+        <!-- No table called Nirgends exists: GOBD3002 -->
+        <ForeignKey>
+          <Name>Id</Name>
+          <References>Nirgends</References>
+        </ForeignKey>
+      </VariableLength>
+    </Table>
+  </Media>
+</DataSet>

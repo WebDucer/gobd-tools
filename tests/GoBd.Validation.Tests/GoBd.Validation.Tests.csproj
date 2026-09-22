@@ -1,0 +1,42 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>GoBd.Validation.Tests</RootNamespace>
+    <IsPackable>false</IsPackable>
+    <!-- xUnit v3 test projects are executables. This selects the Microsoft Testing Platform
+         runner instead of xUnit's own console runner; global.json selects MTP for dotnet test. -->
+    <UseMicrosoftTestingPlatformRunner>true</UseMicrosoftTestingPlatformRunner>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="Microsoft.Testing.Extensions.CodeCoverage" />
+    <PackageReference Include="Shouldly" />
+    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="xunit.runner.visualstudio">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Shouldly" />
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="Fixtures\**\*" Exclude="Fixtures\**\*.cs" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\GoBd.Validation\GoBd.Validation.csproj" />
+    <ProjectReference Include="..\..\src\GoBd.Validation.Cli\GoBd.Validation.Cli.csproj" />
+    <!-- Both engines are exercised from one test project, because holding them to the same
+         findings means running the same fixtures through both. -->
+    <ProjectReference Include="..\..\src\GoBd.Reader.Data\GoBd.Reader.Data.csproj" />
+    <!-- The reader's view models: what the navigator shows, when a table is shown as data and
+         when as a report, and how the grid pages through the store. None of them needs a window. -->
+    <ProjectReference Include="..\..\src\GoBd.Reader.Ui\GoBd.Reader.Ui.csproj" />
+  </ItemGroup>
+
+</Project>

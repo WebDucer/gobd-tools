@@ -1,0 +1,39 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>GoBd.Reader.Ui.Tests</RootNamespace>
+    <IsPackable>false</IsPackable>
+    <!-- xUnit v3 test projects are executables. This selects the Microsoft Testing Platform
+         runner instead of xUnit's own console runner; global.json selects MTP for dotnet test. -->
+    <UseMicrosoftTestingPlatformRunner>true</UseMicrosoftTestingPlatformRunner>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="Shouldly" />
+    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="xunit.runner.visualstudio">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <!-- A windowing platform that draws nothing: the controls are built, laid out and clicked,
+         and no window ever appears. That is what lets a filter editor be driven on a machine with
+         no display, in the same run as every other test.
+         Avalonia.Headless.XUnit is deliberately absent. Its 12.1.2 discoverer is built against
+         xUnit v3 3.2.2 and calls a helper whose signature changed in 4.0.0, so every test fails
+         at discovery with a MissingMethodException. Its whole job is to run a test body on the
+         Avalonia dispatcher, which HeadlessTest does here in a few lines, and one xUnit version
+         across the repository is worth more than the attribute. -->
+    <PackageReference Include="Avalonia.Headless" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Shouldly" />
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\GoBd.Reader.Ui\GoBd.Reader.Ui.csproj" />
+  </ItemGroup>
+
+</Project>

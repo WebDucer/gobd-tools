@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<assembly manifestVersion="1.0" xmlns="urn:schemas-microsoft-com:asm.v1">
+  <!-- The validator's identifier on Windows, the same one its macOS signature carries. See the
+       repackage-reader change's design.md D9. NativeAOT copies the manifest into the native
+       executable. -->
+  <assemblyIdentity version="1.0.0.0" name="de.webducer.gobd.cli" />
+  <!-- As the compiler's default manifest has it, which this one replaces: the validator runs with
+       the rights of whoever starts it, and never asks for more. -->
+  <trustInfo xmlns="urn:schemas-microsoft-com:asm.v2">
+    <security>
+      <requestedPrivileges xmlns="urn:schemas-microsoft-com:asm.v3">
+        <requestedExecutionLevel level="asInvoker" uiAccess="false" />
+      </requestedPrivileges>
+    </security>
+  </trustInfo>
+</assembly>

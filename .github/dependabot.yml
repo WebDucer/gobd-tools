@@ -1,0 +1,33 @@
+# Keeps current what the builds depend on: the actions the workflows pin by commit, and the
+# packages Directory.Packages.props names for every project. Security updates arrive whatever this
+# file says; these are the ordinary ones.
+#
+# The updates are grouped, because some of these move together and a pull request each would say
+# less than one that moves a set. The Avalonia packages are one release and mixing versions across
+# them is not supported; the testing packages have to agree on xunit.v3 and its runner exactly.
+version: 2
+
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    groups:
+      actions:
+        patterns: ["*"]
+
+  - package-ecosystem: nuget
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    groups:
+      avalonia:
+        patterns: ["Avalonia*"]
+      skia-and-harfbuzz:
+        patterns: ["SkiaSharp*", "HarfBuzzSharp*"]
+      testing:
+        patterns: ["xunit*", "Microsoft.NET.Test.Sdk", "Microsoft.Testing.*", "Shouldly"]

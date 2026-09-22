@@ -1,0 +1,101 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <RootNamespace>GoBd.Reader.Ui</RootNamespace>
+    <AssemblyName>gobd-reader</AssemblyName>
+    <IsPackable>false</IsPackable>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+  </PropertyGroup>
+
+  <!-- Trimmed at publish: the runtime and the libraries carry far more managed code than the
+       reader reaches. Set here rather than on the command line, because it also turns the trim
+       analyzer on in every build, so a use of reflection fails `dotnet build` and the tests and
+       not only a publish. See the change's design.md D3.
+
+       Every trim warning is reported in full, under its own code, except for the one assembly
+       that KeepStoreBindingUntrimmed gives a single warning. The IL2104 suppressed here can
+       therefore only ever come from that assembly. -->
+  <PropertyGroup>
+    <PublishTrimmed>true</PublishTrimmed>
+    <TrimmerSingleWarn>false</TrimmerSingleWarn>
+    <NoWarn>$(NoWarn);IL2104</NoWarn>
+  </PropertyGroup>
+
+  <!-- The icon Explorer, the desktop and the taskbar show for the Windows executable. The SDK copies
+       it into the executable's resources, as it does the manifest, including when it builds on
+       Linux. The file is made from Assets/gobd-reader.svg by .github/scripts/make-reader-icons.sh,
+       and never by hand. See the add-reader-icon change's design.md D1 and D4. -->
+  <PropertyGroup>
+    <ApplicationIcon>Assets\gobd-reader.ico</ApplicationIcon>
+  </PropertyGroup>
+
+  <!-- The same icon for the window, on Windows and Linux. See the add-reader-icon change's
+       design.md D5. -->
+  <ItemGroup>
+    <AvaloniaResource Include="Assets\gobd-reader.ico" />
+    <AvaloniaResource Include="Assets\gobd-reader.png" />
+  </ItemGroup>
+
+  <!-- A build for a platform carries its runtime: an auditor's machine has no .NET. -->
+  <PropertyGroup Condition="'$(RuntimeIdentifier)' != ''">
+    <SelfContained>true</SelfContained>
+  </PropertyGroup>
+
+  <!-- One file on Windows and Linux. Managed code loads from inside it; the native libraries are
+       unpacked on first start and reused afterwards. macOS publishes a folder instead, which
+       becomes the application bundle: a single file inside a bundle would unpack its libraries
+       outside the bundle and its signature. See the change's design.md D1. -->
+  <PropertyGroup Condition="$(RuntimeIdentifier.StartsWith('win-')) Or $(RuntimeIdentifier.StartsWith('linux-'))">
+    <PublishSingleFile>true</PublishSingleFile>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- TableView is read-only by design, virtualises rows and cells, and lives in the core
+         package under MIT. See the change's design.md D6. -->
+    <PackageReference Include="Avalonia" />
+    <PackageReference Include="Avalonia.Desktop" />
+    <PackageReference Include="Avalonia.Themes.Fluent" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\GoBd.Reader.Data\GoBd.Reader.Data.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="GoBd.Validation.Tests" />
+    <!-- The controls are internal, and the tests that drive them headlessly live in their own
+         project: standing up a windowing platform is not something the view-model tests should
+         pay for. -->
+    <InternalsVisibleTo Include="GoBd.Reader.Ui.Tests" />
+  </ItemGroup>
+
+  <!-- The store's binding is left exactly as its package ships it, and its trim warnings collapse
+       into the one IL2104 suppressed above. They point at its readers for LIST, MAP and STRUCT
+       columns and at collection-valued parameters. The reader binds only text parameters and
+       selects no nested column, so it reaches none of them. Both have to be checked again on
+       every upgrade of DuckDB.NET.Data, because a new warning in it would pass silently. See the
+       change's design.md D3. -->
+  <Target Name="KeepStoreBindingUntrimmed" BeforeTargets="PrepareForILLink">
+    <ItemGroup>
+      <ManagedAssemblyToLink Condition="'%(Filename)' == 'DuckDB.NET.Data'">
+        <TrimMode>copy</TrimMode>
+        <TrimmerSingleWarn>true</TrimmerSingleWarn>
+      </ManagedAssemblyToLink>
+    </ItemGroup>
+  </Target>
+
+  <!-- The Skia and HarfBuzz packages put native symbol files for Windows under
+       runtimes/<rid>/native, which NuGet copies as native libraries, so DebugType does not reach
+       them. They are 100 MB that serve whoever builds Skia, not whoever reads an export. See the
+       change's design.md D5. -->
+  <Target Name="DropNativeSymbolFiles" AfterTargets="ComputeResolvedFilesToPublishList">
+    <ItemGroup>
+      <ResolvedFileToPublish Remove="@(ResolvedFileToPublish)" Condition="'%(ResolvedFileToPublish.Extension)' == '.pdb'" />
+    </ItemGroup>
+  </Target>
+
+</Project>

@@ -1,0 +1,14 @@
+root = true
+
+[*.cs]
+indent_style = space
+indent_size = 4
+
+# Culture must never enter value handling. GoBD numeric and date semantics come from the
+# symbols declared in index.xml, never from ambient culture. These rules are OFF under
+# AnalysisMode=Default, so severity is set explicitly here -- WarningsAsErrors alone would
+# escalate nothing, because a disabled rule is never reported. See design.md D5 and D8.
+dotnet_diagnostic.CA1304.severity = error   # Specify CultureInfo
+dotnet_diagnostic.CA1305.severity = error   # Specify IFormatProvider
+dotnet_diagnostic.CA1307.severity = error   # Specify StringComparison for clarity
+dotnet_diagnostic.CA1310.severity = error   # Specify StringComparison for correctness

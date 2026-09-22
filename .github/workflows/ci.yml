@@ -1,0 +1,346 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_NOLOGO: "true"
+  DOTNET_CLI_TELEMETRY_OPTOUT: "true"
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          global-json-file: global.json
+      - run: dotnet restore
+      - run: dotnet build --no-restore --configuration Release
+      - run: dotnet test --no-build --configuration Release
+
+      # The locale-invariance guarantees come from explicit format providers and the culture
+      # analyzers, not from the InvariantGlobalization switch. Running the suite once with the
+      # switch off proves that: everything must still pass, and only the test that asserts the
+      # switch itself steps aside. See design.md D5 and D8.
+      - name: Test without globalization-invariant mode
+        run: |
+          dotnet test --configuration Release -p:InvariantGlobalization=false
+
+      # A release takes its version from its tag, by one rule every project imports. It is asked
+      # of the build here for good and malformed tags, without building anything. See the
+      # prepare-public-release change's design.md D1.
+      - name: Check the release version rule
+        run: bash .github/scripts/verify-release-version.sh
+
+  publish:
+    name: Publish ${{ matrix.rid }}
+    needs: test
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-latest,    rid: linux-x64,   binary: gobd-validate }
+          - { os: ubuntu-24.04-arm, rid: linux-arm64, binary: gobd-validate }
+          - { os: windows-latest,   rid: win-x64,     binary: gobd-validate.exe }
+          - { os: windows-11-arm,   rid: win-arm64,   binary: gobd-validate.exe }
+          - { os: macos-latest,     rid: osx-arm64,   binary: gobd-validate }
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          global-json-file: global.json
+
+      # NativeAOT links with the platform's own tools. The x64 Linux image carries them; the arm64
+      # image is built separately, so they are installed here when they are missing. See the
+      # repackage-reader change's design.md D10.
+      - name: Make sure NativeAOT can link
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          if command -v clang > /dev/null && dpkg -s zlib1g-dev > /dev/null 2>&1; then
+            echo "clang and zlib are already on this image"
+          else
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq --no-install-recommends clang zlib1g-dev
+          fi
+
+      # Says what the ARM64 Windows image brings, so a link failure below can be read.
+      - name: Show the C++ toolset NativeAOT will link with
+        if: matrix.rid == 'win-arm64'
+        shell: bash
+        run: |
+          vswhere="/c/Program Files (x86)/Microsoft Visual Studio/Installer/vswhere.exe"
+          if [ -x "$vswhere" ]; then
+            studio="$("$vswhere" -latest -products '*' -property installationPath | tr -d '\r')"
+            echo "Visual Studio: $studio"
+            ls "$studio/VC/Tools/MSVC" || true
+          else
+            echo "vswhere is not on this image"
+          fi
+
+      # NativeAOT must stay warning-free: a trim warning means something will fail at runtime
+      # rather than at build time.
+      - name: Publish NativeAOT
+        run: >
+          dotnet publish src/GoBd.Validation.Cli
+          --configuration Release
+          --runtime ${{ matrix.rid }}
+          -p:PublishAot=true
+          -warnaserror
+
+      # The linker signs the binary ad hoc, under the name of the file. Signed again under the
+      # validator's identifier, it carries the same one its Windows manifest does, and the smoke
+      # tests below run the binary as it ships. See the repackage-reader change's design.md D9.
+      - name: Sign under the validator's identifier
+        if: runner.os == 'macOS'
+        run: |
+          set -euo pipefail
+          binary="src/GoBd.Validation.Cli/bin/Release/net10.0/${{ matrix.rid }}/publish/${{ matrix.binary }}"
+          codesign --force --sign - --identifier de.webducer.gobd.cli "$binary"
+          codesign --verify "$binary"
+          codesign -dv "$binary" 2>&1 | grep -x "Identifier=de.webducer.gobd.cli"
+
+      - name: Verify the manifest names the validator
+        if: startsWith(matrix.rid, 'win-')
+        shell: bash
+        run: |
+          set -euo pipefail
+          binary="src/GoBd.Validation.Cli/bin/Release/net10.0/${{ matrix.rid }}/publish/${{ matrix.binary }}"
+          grep -a -q 'name="de.webducer.gobd.cli"' "$binary"
+
+      - name: Smoke test the native binary
+        shell: bash
+        run: |
+          set -euo pipefail
+          binary="src/GoBd.Validation.Cli/bin/Release/net10.0/${{ matrix.rid }}/publish/${{ matrix.binary }}"
+          "$binary" tests/GoBd.Validation.Tests/Fixtures/good-export --language en
+          echo "known-good fixture exited $?"
+
+      - name: Smoke test the defective fixture
+        shell: bash
+        run: |
+          set -euo pipefail
+          binary="src/GoBd.Validation.Cli/bin/Release/net10.0/${{ matrix.rid }}/publish/${{ matrix.binary }}"
+          set +e
+          "$binary" tests/GoBd.Validation.Tests/Fixtures/broken-export --language en
+          actual=$?
+          set -e
+          if [ "$actual" -ne 2 ]; then
+            echo "expected exit code 2 for a non-conformant export, got $actual" >&2
+            exit 1
+          fi
+
+      # The binary is delivered alone, so it prints its licence and the notices of what it contains
+      # with nothing beside it. See the prepare-public-release change's design.md D4.
+      - name: Print the licence and notices from the binary alone
+        shell: bash
+        run: |
+          set -euo pipefail
+          alone="$(mktemp -d)"
+          cp "src/GoBd.Validation.Cli/bin/Release/net10.0/${{ matrix.rid }}/publish/${{ matrix.binary }}" "$alone/"
+          cd "$alone"
+          licence="$("./${{ matrix.binary }}" --license)"
+          grep -qF "MIT License" <<< "$licence"
+          notice="$("./${{ matrix.binary }}" --notice)"
+          grep -qF "Audicon" <<< "$notice"
+          notices="$("./${{ matrix.binary }}" --third-party-notices)"
+          grep -qF ".NET" <<< "$notices"
+          echo "licence: $(wc -l <<< "$licence") lines, notice: $(wc -l <<< "$notice") lines,"\
+            "third-party notices: $(wc -l <<< "$notices") lines"
+
+      # Windows resolves the report language through GetUserDefaultUILanguage, which is the one
+      # path the development machine cannot exercise.
+      - name: Exercise operating-system language detection
+        if: startsWith(matrix.rid, 'win-')
+        shell: bash
+        run: |
+          set -euo pipefail
+          binary="src/GoBd.Validation.Cli/bin/Release/net10.0/${{ matrix.rid }}/publish/${{ matrix.binary }}"
+          "$binary" tests/GoBd.Validation.Tests/Fixtures/good-export | tee detected.txt
+          grep -q "GoBD" detected.txt
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: gobd-validate-${{ matrix.rid }}
+          path: src/GoBd.Validation.Cli/bin/Release/net10.0/${{ matrix.rid }}/publish/${{ matrix.binary }}
+          if-no-files-found: error
+          # A CI build is evidence about a commit, worth keeping only while someone is looking
+          # at it. The versioned copy is the one attached to a release.
+          retention-days: 2
+
+  # One bill of materials per tool, made on every commit as a release makes them, so that one
+  # that can no longer be made, or no longer agrees with the notices, fails here and not on
+  # release day. See the prepare-public-release change's design.md D11.
+  sbom:
+    name: Bills of materials
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          global-json-file: global.json
+
+      - name: Make the bills of materials
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(dotnet msbuild src/GoBd.Validation.Cli -nologo -t:GetAssemblyVersion -getProperty:AssemblyVersion)"
+          bash .github/scripts/make-sbom.sh "$version" sbom
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: sbom
+          path: sbom/*.cdx.json
+          if-no-files-found: error
+          retention-days: 2
+
+  # The reader is built for every platform on Linux. Nothing in its build needs the operating
+  # system or the processor it is for, and macOS and Windows runners cost many Linux minutes each.
+  # Only the disk image needs macOS, and reader-dmg makes it from what this job assembles. See the
+  # repackage-reader change's design.md D7 and D10.
+  reader:
+    name: Reader
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          global-json-file: global.json
+
+      # The project decides the shape from the runtime identifier: one trimmed file for Windows
+      # and Linux, a self-contained folder for macOS.
+      - name: Publish the reader for each platform
+        shell: bash
+        run: |
+          set -euo pipefail
+          for rid in linux-x64 linux-arm64 win-x64 win-arm64 osx-arm64; do
+            dotnet publish src/GoBd.Reader.Ui --configuration Release --runtime "$rid" --output "publish/$rid" -warnaserror
+          done
+
+      - name: Verify each published reader
+        shell: bash
+        run: |
+          set -euo pipefail
+          for rid in linux-x64 linux-arm64 win-x64 win-arm64 osx-arm64; do
+            bash .github/scripts/verify-reader-publish.sh "publish/$rid" "$rid"
+          done
+
+      # A trimmed single file can break in ways no warning announces. Started with an export, it
+      # has to unpack, start and open its store. The ARM64 file is started in reader-arm64-smoke,
+      # where it can run. See the repackage-reader change's design.md D8.
+      - name: Start the Linux reader with an export
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq --no-install-recommends xvfb xauth libice6 libsm6 libfontconfig1
+          bash .github/scripts/smoke-start-reader.sh publish/linux-x64/gobd-reader tests/GoBd.Validation.Tests/Fixtures/good-export
+
+      # The disk image job checks nothing out, so the script that finishes the bundle travels
+      # with it.
+      - name: Stage the builds
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts handover
+          cp publish/linux-x64/gobd-reader artifacts/gobd-reader-linux-x64
+          cp publish/linux-arm64/gobd-reader artifacts/gobd-reader-linux-arm64
+          cp publish/win-x64/gobd-reader.exe artifacts/gobd-reader-win-x64.exe
+          cp publish/win-arm64/gobd-reader.exe artifacts/gobd-reader-win-arm64.exe
+          bash .github/scripts/assemble-reader-app.sh publish/osx-arm64 handover/gobd-reader-osx-arm64.app.tar.gz 0.0.0
+          cp .github/scripts/make-reader-dmg.sh handover/
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: gobd-reader-linux-x64
+          path: artifacts/gobd-reader-linux-x64
+          if-no-files-found: error
+          retention-days: 2
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: gobd-reader-linux-arm64
+          path: artifacts/gobd-reader-linux-arm64
+          if-no-files-found: error
+          retention-days: 2
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: gobd-reader-win-x64
+          path: artifacts/gobd-reader-win-x64.exe
+          if-no-files-found: error
+          retention-days: 2
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: gobd-reader-win-arm64
+          path: artifacts/gobd-reader-win-arm64.exe
+          if-no-files-found: error
+          retention-days: 2
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: handover-reader-osx-arm64
+          path: handover/*
+          if-no-files-found: error
+          retention-days: 2
+
+  # The ARM64 file cannot run on an x64 runner, so it is started where it belongs. See the
+  # repackage-reader change's design.md D8 and D10.
+  reader-arm64-smoke:
+    name: Reader ARM64 smoke start
+    needs: reader
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: gobd-reader-linux-arm64
+          path: build
+
+      - name: Start the ARM64 reader with an export
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq --no-install-recommends xvfb xauth libice6 libsm6 libfontconfig1
+          # The artifact download drops the executable bit.
+          chmod +x build/gobd-reader-linux-arm64
+          bash .github/scripts/smoke-start-reader.sh build/gobd-reader-linux-arm64 tests/GoBd.Validation.Tests/Fixtures/good-export
+
+  # Needs nothing but what macOS brings: no checkout, no .NET. See the repackage-reader change's
+  # design.md D6 and D7.
+  reader-dmg:
+    name: Reader disk image
+    needs: reader
+    runs-on: macos-latest
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: handover-reader-osx-arm64
+          path: handover
+
+      - name: Make the disk image
+        run: >
+          bash handover/make-reader-dmg.sh
+          handover/gobd-reader-osx-arm64.app.tar.gz
+          artifacts/gobd-reader-osx-arm64.dmg
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: gobd-reader-osx-arm64
+          path: artifacts/gobd-reader-osx-arm64.dmg
+          if-no-files-found: error
+          retention-days: 2

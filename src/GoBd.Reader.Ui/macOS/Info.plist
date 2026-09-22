@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- What the reader's application bundle tells macOS about it. .github/scripts/assemble-reader-app.sh
+     puts it in the bundle and fills in the version. See the change's design.md D6 and D9. -->
+<plist version="1.0">
+<dict>
+  <key>CFBundleName</key>
+  <string>GoBD Reader</string>
+  <key>CFBundleDisplayName</key>
+  <string>GoBD Reader</string>
+  <key>CFBundleIdentifier</key>
+  <string>de.webducer.gobd.reader</string>
+  <key>CFBundleExecutable</key>
+  <string>gobd-reader</string>
+  <!-- gobd-reader.icns in Contents/Resources, made from Assets/gobd-reader.svg by
+       .github/scripts/make-reader-icons.sh and never by hand. See the add-reader-icon change's
+       design.md D6. -->
+  <key>CFBundleIconFile</key>
+  <string>gobd-reader</string>
+  <key>CFBundlePackageType</key>
+  <string>APPL</string>
+  <key>CFBundleInfoDictionaryVersion</key>
+  <string>6.0</string>
+  <key>CFBundleShortVersionString</key>
+  <string>@VERSION@</string>
+  <key>CFBundleVersion</key>
+  <string>@VERSION@</string>
+  <key>LSMinimumSystemVersion</key>
+  <string>14.0</string>
+  <key>NSHighResolutionCapable</key>
+  <true/>
+</dict>
+</plist>

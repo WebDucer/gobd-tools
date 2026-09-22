@@ -1,0 +1,31 @@
+GoBD validator and reader
+
+What the MIT licence covers
+---------------------------
+
+The MIT licence in LICENSE covers the source code, tests, build configuration and
+specifications in this repository, and the parts of gobd-validate and gobd-reader built from
+them.
+
+What it does not cover
+----------------------
+
+The Beschreibungsstandard material published by Audicon GmbH.
+
+  src/GoBd.Validation/Resources/gdpdu-01-03-2019.dtd, and the copy of it that gobd-validate and
+  gobd-reader carry inside them, is Audicon's work. It is redistributed because the standard
+  requires every data carrier to carry it alongside index.xml. It is not covered by the MIT
+  licence.
+
+  The specification document that accompanies it, and the archive it is published in, are not
+  redistributed here at all. Both are published by Audicon/Caseware at
+  https://www.caseware.com/de/beschreibungsstandard
+
+The components of other projects that the builds contain. Each is named, with its licence, in
+THIRD-PARTY-NOTICES.txt, which gobd-validate prints with --notices and gobd-reader shows under
+Help > Third-party notices.
+
+The icon
+--------
+
+The reader's icon was generated with Recraft, through Mammouth AI, and edited in Affinity.

@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>GoBd.Reader.Data</RootNamespace>
+    <IsPackable>false</IsPackable>
+    <!-- Deliberately not AOT-compatible: this project exists to carry the native store, which is
+         the one thing the CLI must never acquire. See the change's design.md D9. -->
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- MIT, as DuckDB itself is. The .Full variant carries the native library per platform, so
+         a desktop build needs nothing installed on the machine. -->
+    <PackageReference Include="DuckDB.NET.Data.Full" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\GoBd.Validation\GoBd.Validation.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="GoBd.Validation.Tests" />
+  </ItemGroup>
+
+</Project>

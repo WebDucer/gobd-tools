@@ -1,0 +1,98 @@
+<Project>
+
+  <!--
+    The arrow that must never be drawn is GoBd.Validation -> GoBd.Reader.Data.
+
+    The CLI is adoptable because it is one self-contained file with nothing to install, and a
+    bundled native store is a second file whether or not it publishes cleanly. That property is
+    worth a build failure rather than a convention: a transitive reference acquired by accident
+    would not announce itself, and the cost would only surface when someone tried to run the
+    published binary on a machine that had never seen it.
+
+    Resolved references are inspected rather than the declared ones, so a dependency arriving
+    through another project is caught as readily as one written into this file. See the change's
+    design.md D9.
+  -->
+  <Target Name="ForbidNativeStoreDependency"
+          AfterTargets="ResolveAssemblyReferences"
+          Condition="'$(ForbidsNativeStore)' == 'true'">
+
+    <ItemGroup>
+      <ForbiddenReference Include="@(ReferencePath)"
+                          Condition="$([System.String]::Copy('%(Filename)').StartsWith('DuckDB'))
+                                  Or $([System.String]::Copy('%(Filename)').StartsWith('GoBd.Reader'))" />
+    </ItemGroup>
+
+    <Error Condition="'@(ForbiddenReference)' != ''"
+           Code="GOBDBUILD001"
+           Text="$(MSBuildProjectName) must not depend on the native store: @(ForbiddenReference->'%(Filename)', ', '). The CLI ships as one self-contained file; see the change's design.md D9." />
+  </Target>
+
+  <!--
+    A release takes its version from its tag, and from nowhere else.
+
+    The release workflow passes the tag it builds for as ReleaseTag. The tag is v<major>, then
+    optionally .<minor>, then optionally .<patch>; an omitted part is 0. The version becomes
+    <major>.<minor>.<patch>, from which the SDK derives the assembly and file version
+    <major>.<minor>.<patch>.0 that both tools report. A tag of any other form, or with a part
+    larger than a version can hold, fails the build rather than release under a version nobody
+    chose. Without ReleaseTag, the 0.0.0 of Directory.Build.props stands.
+
+    The workflow also asks this target for the macOS bundle's version:
+      dotnet msbuild <project> -t:ComputeReleaseVersion -getProperty:Version -p:ReleaseTag=<tag>
+
+    See the prepare-public-release change's design.md D1.
+  -->
+  <UsingTask TaskName="ReadReleaseTag"
+             TaskFactory="RoslynCodeTaskFactory"
+             AssemblyFile="$(MSBuildToolsPath)/Microsoft.Build.Tasks.Core.dll">
+    <ParameterGroup>
+      <Tag ParameterType="System.String" Required="true" />
+      <Version ParameterType="System.String" Output="true" />
+    </ParameterGroup>
+    <Task>
+      <Using Namespace="System.Globalization" />
+      <Using Namespace="System.Text.RegularExpressions" />
+      <Code Type="Fragment" Language="cs"><![CDATA[
+        // 65535 is reserved, so this is the largest a part of an assembly version may be.
+        const int largest = 65534;
+        var match = Regex.Match(Tag, @"^v([0-9]+)(?:\.([0-9]+))?(?:\.([0-9]+))?$");
+        if (!match.Success)
+        {
+            Log.LogError(null, "GOBDBUILD002", null, null, 0, 0, 0, 0,
+                "'" + Tag + "' is not a release tag. A release tag is v<major>, optionally followed by .<minor> and .<patch>, each a whole number, such as v1, v1.2 or v0.3.7.");
+        }
+        else
+        {
+            var parts = new int[3];
+            for (var index = 0; index < 3; index++)
+            {
+                var group = match.Groups[index + 1];
+                if (group.Success
+                    && (!int.TryParse(group.Value, NumberStyles.None, CultureInfo.InvariantCulture, out parts[index])
+                        || parts[index] > largest))
+                {
+                    Log.LogError(null, "GOBDBUILD002", null, null, 0, 0, 0, 0,
+                        "'" + Tag + "' is not a release tag: each part of a version may be at most " + largest.ToString(CultureInfo.InvariantCulture) + ".");
+                    break;
+                }
+            }
+
+            if (!Log.HasLoggedErrors)
+            {
+                Version = string.Join(".", parts[0].ToString(CultureInfo.InvariantCulture), parts[1].ToString(CultureInfo.InvariantCulture), parts[2].ToString(CultureInfo.InvariantCulture));
+            }
+        }
+      ]]></Code>
+    </Task>
+  </UsingTask>
+
+  <Target Name="ComputeReleaseVersion"
+          BeforeTargets="GetAssemblyVersion"
+          Condition="'$(ReleaseTag)' != ''">
+    <ReadReleaseTag Tag="$(ReleaseTag)">
+      <Output TaskParameter="Version" PropertyName="Version" />
+    </ReadReleaseTag>
+  </Target>
+
+</Project>
