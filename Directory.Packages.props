@@ -10,10 +10,10 @@
   <ItemGroup>
     <!-- The Avalonia packages are one release and move together: mixing versions across them is
          not supported, and Avalonia.Headless has to match what the reader itself is built on. -->
-    <PackageVersion Include="Avalonia" Version="12.1.2" />
-    <PackageVersion Include="Avalonia.Desktop" Version="12.1.2" />
-    <PackageVersion Include="Avalonia.Headless" Version="12.1.2" />
-    <PackageVersion Include="Avalonia.Themes.Fluent" Version="12.1.2" />
+    <PackageVersion Include="Avalonia" Version="12.1.3" />
+    <PackageVersion Include="Avalonia.Desktop" Version="12.1.3" />
+    <PackageVersion Include="Avalonia.Headless" Version="12.1.3" />
+    <PackageVersion Include="Avalonia.Themes.Fluent" Version="12.1.3" />
     <PackageVersion Include="DuckDB.NET.Data.Full" Version="1.5.5" />
   </ItemGroup>
   <ItemGroup>
