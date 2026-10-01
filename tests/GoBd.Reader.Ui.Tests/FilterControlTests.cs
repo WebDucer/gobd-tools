@@ -207,4 +207,24 @@ public sealed class FilterControlTests : HeadlessTest
         huge.IsEnabled.ShouldBeFalse();
         ((string?)ToolTip.GetTip(huge)).ShouldNotBeNull().ShouldContain("still shown");
     });
+
+    [Fact]
+    public Task AChipNamesAPatternOrAListShortly() => Ui(() =>
+    {
+        using var harness = ExportHarness.Create(Tables, ("t.csv", Records));
+        var (view, tab) = Driver.Show(harness);
+
+        // The editor explains how to type a pattern or a list; the chip only says which it is.
+        tab.Query = new TableQuery(
+            [
+                new ColumnFilter(Text, FilterComparison.Matches, ["M*"]),
+                new ColumnFilter(Text, FilterComparison.OneOf, ["Miete", "Porto"]),
+            ],
+            []);
+        view.Refresh();
+
+        var said = Driver.Texts(view);
+        said.ShouldContain("Text matches M*");
+        said.ShouldContain("Text one of Miete … Porto");
+    });
 }

@@ -1,4 +1,5 @@
 using GoBd.Reader.Ui.Controls;
+using GoBd.Validation.Localisation;
 
 namespace GoBd.Reader.Ui.Tests;
 
@@ -98,5 +99,20 @@ public sealed class SummaryAndNoticeTests : HeadlessTest
         summary.Show(session.Reading, harness.ExportPath);
 
         Driver.Texts(summary).ShouldNotContain("What this reader cannot do with it");
+    });
+
+    [Fact]
+    public Task ARefusalIsSaidAgainWhenTheLanguageChanges() => Ui(() =>
+    {
+        var page = new StartPageView();
+        page.ShowRefusal(language => language == ReportLanguage.German ? "Der Grund." : "The reason.");
+        Driver.Texts(page).ShouldContain("The reason.");
+
+        page.SetLanguage(ReportLanguage.German);
+
+        var said = Driver.Texts(page);
+        said.ShouldContain(UiText.RefusalTitle(ReportLanguage.German));
+        said.ShouldContain("Der Grund.");
+        said.ShouldNotContain("The reason.");
     });
 }

@@ -54,11 +54,20 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- Semi.Avalonia creates CultureInfo objects for the locales it ships texts in, which
+         invariant globalization refuses unless predefined cultures are not required. Allowing
+         them keeps the reader invariant, and so free of a libicu dependency on Linux, as
+         design.md D8 intends. Nothing here formats by culture: German numbers are written with
+         an explicit format in UiText. -->
+    <RuntimeHostConfigurationOption Include="System.Globalization.PredefinedCulturesOnly" Value="false" Trim="true" />
+  </ItemGroup>
+
+  <ItemGroup>
     <!-- TableView is read-only by design, virtualises rows and cells, and lives in the core
          package under MIT. See the change's design.md D6. -->
     <PackageReference Include="Avalonia" />
     <PackageReference Include="Avalonia.Desktop" />
-    <PackageReference Include="Avalonia.Themes.Fluent" />
+    <PackageReference Include="Semi.Avalonia" />
   </ItemGroup>
 
   <ItemGroup>

@@ -1,11 +1,13 @@
 using System.Globalization;
 using Avalonia;
+using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Controls.Templates;
 using Avalonia.Data;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Layout;
+using Avalonia.Markup.Xaml.MarkupExtensions;
 using Avalonia.Media;
 using Avalonia.VisualTree;
 using GoBd.Reader.Data;
@@ -43,9 +45,9 @@ internal sealed class TableTabView : DockPanel
     /// </remarks>
     private const int LeadingColumns = 2;
 
-    private static readonly IBrush LinkBrush = new SolidColorBrush(Color.FromRgb(0x1A, 0x5F, 0xB4));
-    private static readonly IBrush DanglingBrush = new SolidColorBrush(Color.FromRgb(0xA5, 0x1D, 0x2D));
     private static readonly Cursor HandCursor = new(StandardCursorType.Hand);
+
+    private ReportLanguage language;
 
     private readonly ReaderSession session;
     private readonly TableTab tab;
@@ -56,20 +58,32 @@ internal sealed class TableTabView : DockPanel
     private readonly TextBlock subtitle = new() { Opacity = 0.75, TextWrapping = TextWrapping.Wrap };
     private readonly TextBlock status = new() { TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center };
     private readonly StackPanel walkBar;
-    private readonly Button previous = new() { Content = "Previous" };
-    private readonly Button next = new() { Content = "Next" };
+    private readonly Button previous = new();
+    private readonly Button next = new();
     private readonly ContentControl body = new();
+
+    private readonly TextBlock filtersRowLabel = new() { Opacity = 0.75, VerticalAlignment = VerticalAlignment.Center };
+    private readonly TextBlock sortRowLabel = new() { Opacity = 0.75, VerticalAlignment = VerticalAlignment.Center };
+    private readonly TextBlock figuresRowLabel = new() { Opacity = 0.75, VerticalAlignment = VerticalAlignment.Center };
+
+    private readonly Button addFilterButton;
+    private readonly Button addSortButton;
+    private readonly Button addFigureButton;
 
     private readonly WrapPanel filters = new() { Orientation = Orientation.Horizontal, ItemSpacing = 6, LineSpacing = 4 };
     private readonly WrapPanel sorts = new() { Orientation = Orientation.Horizontal, ItemSpacing = 6, LineSpacing = 4 };
     private readonly WrapPanel figures = new() { Orientation = Orientation.Horizontal, ItemSpacing = 6, LineSpacing = 4 };
     private readonly TextBlock banner = new() { TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center };
-    private readonly Button reset = new() { Content = "Back to file order" };
+    private readonly Button reset = new();
     private readonly TextBlock preparing = new() { Opacity = 0.75, IsVisible = false, VerticalAlignment = VerticalAlignment.Center };
     private readonly TextBlock notice = new() { TextWrapping = TextWrapping.Wrap, IsVisible = false, FontStyle = FontStyle.Italic };
-    private readonly StackPanel figuresStrip = new() { Orientation = Orientation.Horizontal, Spacing = 18, Margin = new Thickness(12, 6, 12, 8) };
+    private readonly StackPanel figuresPanel = new() { Orientation = Orientation.Horizontal, Spacing = 18 };
+    private readonly Border figuresStrip;
 
     private TableView? grid;
+
+    /// <summary>The figures last shown, so a change of language can say them again.</summary>
+    private IReadOnlyList<FigureReading> figureReadings = [];
 
     /// <summary>Creates the tab for one table.</summary>
     /// <param name="session">The open export.</param>
@@ -77,12 +91,14 @@ internal sealed class TableTabView : DockPanel
     /// <param name="follow">Called with the table, record and column a reference was followed from.</param>
     /// <param name="offerReferrers">Called to offer the tables referring to a record.</param>
     /// <param name="step">Called to move one referring record backwards or forwards.</param>
+    /// <param name="language">The language the tab speaks until told otherwise.</param>
     public TableTabView(
         ReaderSession session,
         TableTab tab,
         Action<TableNode, RecordRow, int> follow,
         Action<TableNode, RecordRow, Control> offerReferrers,
-        Action<int> step)
+        Action<int> step,
+        ReportLanguage language = ReportLanguage.English)
     {
         ArgumentNullException.ThrowIfNull(session);
         ArgumentNullException.ThrowIfNull(tab);
@@ -92,6 +108,7 @@ internal sealed class TableTabView : DockPanel
         this.follow = follow;
         this.offerReferrers = offerReferrers;
         this.step = step;
+        this.language = language;
 
         previous.Click += (_, _) => this.step(-1);
         next.Click += (_, _) => this.step(1);
@@ -105,6 +122,20 @@ internal sealed class TableTabView : DockPanel
             Children = { previous, next },
         };
 
+        figuresStrip = new Border
+        {
+            BorderThickness = new Thickness(0, 1, 0, 0),
+            Padding = new Thickness(12, 6, 12, 8),
+            Child = figuresPanel,
+            IsVisible = false,
+        };
+        figuresStrip[!Border.BorderBrushProperty] = new DynamicResourceExtension(ReaderTheme.Border);
+        figuresStrip[!Border.BackgroundProperty] = new DynamicResourceExtension(ReaderTheme.Background);
+
+        addFilterButton = Adds(() => FilterEditor());
+        addSortButton = Adds(() => SortEditor());
+        addFigureButton = Adds(() => FigureEditor());
+
         var header = new StackPanel
         {
             Orientation = Orientation.Vertical,
@@ -113,9 +144,9 @@ internal sealed class TableTabView : DockPanel
             Children =
             {
                 subtitle,
-                Row("Filters", filters, Adds("+ Filter", () => FilterEditor())),
-                Row("Sort", sorts, Adds("+ Column", () => SortEditor())),
-                Row("Figures", figures, Adds("+ Column", () => FigureEditor())),
+                Row(filtersRowLabel, filters, addFilterButton),
+                Row(sortRowLabel, sorts, addSortButton),
+                Row(figuresRowLabel, figures, addFigureButton),
                 new StackPanel
                 {
                     Orientation = Orientation.Horizontal,
@@ -132,12 +163,14 @@ internal sealed class TableTabView : DockPanel
             },
         };
 
+        Grid.SetIsSharedSizeScope(header, true);
         SetDock(header, Dock.Top);
         SetDock(figuresStrip, Dock.Bottom);
         Children.Add(header);
         Children.Add(figuresStrip);
         Children.Add(body);
 
+        ApplyTexts();
         Refresh();
     }
 
@@ -155,6 +188,46 @@ internal sealed class TableTabView : DockPanel
 
     /// <summary>Asked to compute the figures a person has chosen for this table.</summary>
     public Func<IReadOnlyList<ColumnFigure>, Task>? Totalled { get; set; }
+
+    /// <summary>Says everything in the given language from now on.</summary>
+    /// <remarks>
+    /// The grid is built afresh, positioned where it was: its column headers and the tooltips of
+    /// the cells that lead elsewhere are set as cells are realised, and a realised cell keeps
+    /// what it was given.
+    /// </remarks>
+    public void SetLanguage(ReportLanguage newLanguage)
+    {
+        language = newLanguage;
+        Remember();
+        grid = null;
+        ApplyTexts();
+        Refresh();
+        ShowFigures(figureReadings);
+    }
+
+    /// <summary>Says what this tab says of its own accord, in the current language.</summary>
+    private void ApplyTexts()
+    {
+        filtersRowLabel.Text = UiText.FiltersLabel(language);
+        sortRowLabel.Text = UiText.SortLabel(language);
+        figuresRowLabel.Text = UiText.FiguresLabel(language);
+        Caption(addFilterButton, UiText.AddFilter(language));
+        Caption(addSortButton, UiText.AddColumn(language));
+        Caption(addFigureButton, UiText.AddColumn(language));
+        reset.Content = UiText.BackToFileOrder(language);
+        preparing.Text = UiText.Preparing(language);
+        previous.Content = UiText.PreviousRecord(language);
+        next.Content = UiText.NextRecord(language);
+        AutomationProperties.SetName(previous, UiText.PreviousReferring(language));
+        AutomationProperties.SetName(next, UiText.NextReferring(language));
+        AutomationProperties.SetName(reset, UiText.ReturnToFileOrder(language));
+    }
+
+    private static void Caption(Button button, string text)
+    {
+        button.Content = text;
+        AutomationProperties.SetName(button, text);
+    }
 
     /// <summary>
     /// Rebuilds whatever has changed: the presentation, what is in force, the status and the walk.
@@ -190,17 +263,13 @@ internal sealed class TableTabView : DockPanel
 
         subtitle.Text = view.Kind switch
         {
-            TableViewKind.Data => string.Create(
-                CultureInfo.InvariantCulture,
-                $"{Shown(view):N0} records · {view.Columns.Count} columns · {tab.Table.Url.Value}"),
-            TableViewKind.NotReady => "Still being read · " + tab.Table.Url.Value,
-            _ => string.Create(
-                CultureInfo.InvariantCulture,
-                $"{view.Findings.Count} finding(s) · {tab.Table.Url.Value}"),
-        };
+            TableViewKind.Data => UiText.DataSubtitle(language, Shown(view), view.Columns.Count),
+            TableViewKind.NotReady => UiText.StillBeingRead(language),
+            _ => UiText.FindingsCount(language, view.Findings.Count),
+        } + " · " + tab.Table.Url.Value;
 
         ShowQuery(view);
-        status.Text = tab.Status;
+        status.Text = tab.Status(language);
 
         var current = tab.NoticeAt(DateTimeOffset.UtcNow);
         notice.Text = current;
@@ -222,18 +291,15 @@ internal sealed class TableTabView : DockPanel
     }
 
     /// <summary>Says that a view is being prepared, so an empty grid is never mistaken for one.</summary>
-    public void Preparing(bool preparing_)
-    {
-        preparing.Text = "Preparing…";
-        preparing.IsVisible = preparing_;
-    }
+    public void Preparing(bool preparing_) => preparing.IsVisible = preparing_;
 
     /// <summary>Shows the figures a person chose, beneath the records they were computed over.</summary>
     public void ShowFigures(IReadOnlyList<FigureReading> readings)
     {
         ArgumentNullException.ThrowIfNull(readings);
 
-        figuresStrip.Children.Clear();
+        figureReadings = readings;
+        figuresPanel.Children.Clear();
         var columns = session.View(tab.Table).Columns;
         var layout = RecordLayout.For(tab.Table);
 
@@ -243,12 +309,14 @@ internal sealed class TableTabView : DockPanel
             var name = at < columns.Count ? columns[at] : "?";
             var column = at < layout.Columns.Count ? layout.Columns[at] : null;
 
-            figuresStrip.Children.Add(new TextBlock
+            figuresPanel.Children.Add(new TextBlock
             {
                 Text = $"{name} {Named(reading.Asked.Figure)} {Stated(reading, layout, column)}",
                 Opacity = 0.9,
             });
         }
+
+        figuresStrip.IsVisible = readings.Count > 0;
     }
 
     /// <summary>
@@ -260,11 +328,11 @@ internal sealed class TableTabView : DockPanel
     /// knows what the export's symbols mean, and a total could then disagree with the column
     /// above it.
     /// </remarks>
-    private static string Stated(FigureReading reading, RecordLayout layout, ColumnLayout? column)
+    private string Stated(FigureReading reading, RecordLayout layout, ColumnLayout? column)
     {
         if (!reading.Exact)
         {
-            return "cannot be computed exactly";
+            return UiText.FigureInexact(language);
         }
 
         if (reading.Value is null)
@@ -272,22 +340,20 @@ internal sealed class TableTabView : DockPanel
             return "—";
         }
 
-        var rounded = reading.Rounded ? " (rounded)" : string.Empty;
-        var missing = reading.Missing > 0
-            ? string.Create(CultureInfo.InvariantCulture, $", {reading.Missing} without a value")
-            : string.Empty;
+        var rounded = reading.Rounded ? " " + UiText.Rounded(language) : string.Empty;
+        var missing = reading.Missing > 0 ? ", " + UiText.WithoutValue(language, reading.Missing) : string.Empty;
 
         return DeclaredText.Write(reading.Value, column, layout) + rounded + missing;
     }
 
-    private static string Named(Figure figure) => figure switch
+    private string Named(Figure figure) => figure switch
     {
-        Figure.Count => "count",
-        Figure.DistinctCount => "distinct",
-        Figure.Sum => "sum",
-        Figure.Minimum => "min",
-        Figure.Maximum => "max",
-        _ => "average",
+        Figure.Count => UiText.FigCount(language),
+        Figure.DistinctCount => UiText.FigDistinct(language),
+        Figure.Sum => UiText.FigSum(language),
+        Figure.Minimum => UiText.FigMin(language),
+        Figure.Maximum => UiText.FigMax(language),
+        _ => UiText.FigAvg(language),
     };
 
     /// <summary>Records the view is showing, of however many the table holds.</summary>
@@ -299,7 +365,7 @@ internal sealed class TableTabView : DockPanel
     /// re-added a control per filter, sort and figure — ten times a second, invalidating the
     /// layout each time — to arrive at what was already on screen.
     /// </remarks>
-    private (TableQuery Query, IReadOnlyList<ColumnFigure> Figures, long Held, long Whole) drawn;
+    private (TableQuery Query, IReadOnlyList<ColumnFigure> Figures, long Held, long Whole, ReportLanguage Language) drawn;
 
     /// <summary>
     /// What is in force: every filter and sorted column, each removable, and what it leaves.
@@ -310,12 +376,14 @@ internal sealed class TableTabView : DockPanel
             tab.Query,
             tab.Figures,
             Held: tab.Rows?.Count ?? view.Rows?.Count ?? 0,
-            Whole: (long)(view.Rows?.Count ?? tab.Rows?.Count ?? 0));
+            Whole: (long)(view.Rows?.Count ?? tab.Rows?.Count ?? 0),
+            Language: language);
 
         if (ReferenceEquals(showing.Query, drawn.Query)
             && ReferenceEquals(showing.Figures, drawn.Figures)
             && showing.Held == drawn.Held
-            && showing.Whole == drawn.Whole)
+            && showing.Whole == drawn.Whole
+            && showing.Language == drawn.Language)
         {
             return;
         }
@@ -338,7 +406,7 @@ internal sealed class TableTabView : DockPanel
             var sort = tab.Query.Sorts[index];
             var without = tab.Query with { Sorts = [.. tab.Query.Sorts.Where(other => other != sort)] };
             var name = sort.Column < columns.Count ? columns[sort.Column] : "?";
-            var direction = sort.Direction == Ordering.Descending ? "descending" : "ascending";
+            var direction = sort.Direction == Ordering.Descending ? UiText.Descending(language) : UiText.Ascending(language);
             sorts.Children.Add(Chip(
                 string.Create(CultureInfo.InvariantCulture, $"{index + 1} {name} {direction}"),
                 () => Ask(without)));
@@ -351,19 +419,23 @@ internal sealed class TableTabView : DockPanel
             figures.Children.Add(Chip($"{name} {Named(figure.Figure)}", () => Total(without)));
         }
 
+        filters.IsVisible = filters.Children.Count > 0;
+        sorts.IsVisible = sorts.Children.Count > 0;
+        figures.IsVisible = figures.Children.Count > 0;
+
         var held = tab.Rows?.Count ?? view.Rows?.Count ?? 0;
         var whole = view.Rows?.Count ?? held;
         banner.Text = tab.Query.IsFileOrder
-            ? string.Create(CultureInfo.InvariantCulture, $"{whole:N0} records, in file order")
+            ? UiText.FileOrderBanner(language, whole)
             : held == 0
-                ? "No record matches"
-                : string.Create(CultureInfo.InvariantCulture, $"Showing {held:N0} of {whole:N0} records");
+                ? UiText.NoRecordMatches(language)
+                : UiText.ShowingBanner(language, held, whole);
 
         reset.IsVisible = !tab.Query.IsFileOrder;
     }
 
     /// <summary>One filter, as the banner names it.</summary>
-    private static string Describe(ColumnFilter filter, IReadOnlyList<string> columns)
+    private string Describe(ColumnFilter filter, IReadOnlyList<string> columns)
     {
         var name = filter.Column < columns.Count ? columns[filter.Column] : "?";
         var comparison = filter.Comparison switch
@@ -374,79 +446,93 @@ internal sealed class TableTabView : DockPanel
             FilterComparison.AtMost => "≤",
             FilterComparison.GreaterThan => ">",
             FilterComparison.AtLeast => "≥",
-            FilterComparison.Between => "between",
-            FilterComparison.Contains => "contains",
-            FilterComparison.StartsWith => "starts with",
-            FilterComparison.EndsWith => "ends with",
-            FilterComparison.Matches => "matches",
-            FilterComparison.OneOf => "one of",
-            FilterComparison.IsEmpty => "is empty",
-            _ => "is not empty",
+
+            // Shorter than the editor's names, which explain how to type the value.
+            FilterComparison.Matches => UiText.MatchesChip(language),
+            FilterComparison.OneOf => UiText.OneOfChip(language),
+            _ => Named(filter.Comparison),
         };
 
         var values = filter.Values.Count == 0 ? string.Empty : " " + string.Join(" … ", filter.Values);
-        var case_ = filter.IgnoreCase ? " (any case)" : string.Empty;
+        var case_ = filter.IgnoreCase ? " " + UiText.AnyCase(language) : string.Empty;
         return $"{name} {comparison}{values}{case_}";
     }
 
     /// <summary>Something in force, with a way to take it off again.</summary>
-    private static Control Chip(string text, Action remove)
+    private Control Chip(string text, Action remove)
     {
         var close = new Button
         {
             Content = "✕",
-            FontSize = 11,
-            Padding = new Thickness(4, 0),
+            FontSize = 10,
+            Padding = new Thickness(4, 1),
             MinWidth = 0,
+            MinHeight = 0,
             Background = Brushes.Transparent,
             BorderThickness = default,
             Opacity = 0.7,
             VerticalAlignment = VerticalAlignment.Center,
         };
+        AutomationProperties.SetName(close, UiText.RemoveChip(language, text));
 
         close.Click += (_, _) => remove();
 
-        return new Border
+        var border = new Border
         {
             BorderThickness = new Thickness(1),
-            BorderBrush = Brushes.Gray,
-            CornerRadius = new CornerRadius(3),
-            Padding = new Thickness(6, 1),
+            CornerRadius = new CornerRadius(12),
+            Padding = new Thickness(8, 2),
             Child = new StackPanel
             {
                 Orientation = Orientation.Horizontal,
-                Spacing = 4,
+                Spacing = 6,
                 Children =
                 {
-                    new TextBlock { Text = text, VerticalAlignment = VerticalAlignment.Center },
+                    new TextBlock
+                    {
+                        Text = text,
+                        FontSize = 12,
+                        VerticalAlignment = VerticalAlignment.Center,
+                    },
                     close,
                 },
             },
         };
+        border[!Border.BackgroundProperty] = new DynamicResourceExtension(ReaderTheme.PrimaryLight);
+        border[!Border.BorderBrushProperty] = new DynamicResourceExtension(ReaderTheme.Border);
+        return border;
     }
 
-    private static Control Row(string label, Control content, Control add) =>
-        new StackPanel
-        {
-            Orientation = Orientation.Horizontal,
-            Spacing = 8,
-            Children =
-            {
-                new TextBlock
-                {
-                    Text = label,
-                    Width = 56,
-                    Opacity = 0.75,
-                    VerticalAlignment = VerticalAlignment.Center,
-                },
-                content,
-                add,
-            },
-        };
-
-    private static Button Adds(string label, Func<Control> editor)
+    /// <summary>
+    /// One row of the control strip: its label, what is in force, and the button that adds another.
+    /// </summary>
+    /// <remarks>
+    /// The labels share a column across the rows, so the strip lines up in whichever language
+    /// labels it. Spaced by margins rather than by the grid, so a row with nothing in force has no
+    /// gap where its chips would be.
+    /// </remarks>
+    private static Grid Row(TextBlock label, Control content, Control add)
     {
-        var button = new Button { Content = label, Padding = new Thickness(8, 2) };
+        label.Margin = new Thickness(0, 0, 8, 0);
+        content.Margin = new Thickness(0, 0, 8, 0);
+        Grid.SetColumn(content, 1);
+        Grid.SetColumn(add, 2);
+
+        return new Grid
+        {
+            ColumnDefinitions =
+            {
+                new ColumnDefinition(GridLength.Auto) { SharedSizeGroup = "RowLabel" },
+                new ColumnDefinition(GridLength.Auto),
+                new ColumnDefinition(GridLength.Auto),
+            },
+            Children = { label, content, add },
+        };
+    }
+
+    private static Button Adds(Func<Control> editor)
+    {
+        var button = new Button { Padding = new Thickness(8, 2) };
         button.Click += (_, _) =>
         {
             var flyout = new Flyout { Content = editor() };
@@ -476,9 +562,7 @@ internal sealed class TableTabView : DockPanel
                 Content = names[index],
                 Tag = index,
                 IsEnabled = allowed,
-                [ToolTip.TipProperty] = allowed
-                    ? null
-                    : "This reader cannot filter, sort or total this column. Its values are still shown.",
+                [ToolTip.TipProperty] = allowed ? null : UiText.ColumnNotQueryable(language),
             });
         }
 
@@ -487,6 +571,14 @@ internal sealed class TableTabView : DockPanel
 
     private static int? Chosen(ComboBox picker) =>
         (picker.SelectedItem as ComboBoxItem)?.Tag as int?;
+
+    /// <summary>Where an editor says why it refused what it was given.</summary>
+    private static TextBlock Complaint()
+    {
+        var complaint = new TextBlock { TextWrapping = TextWrapping.Wrap, IsVisible = false };
+        complaint[!TextBlock.ForegroundProperty] = new DynamicResourceExtension(ReaderTheme.Danger);
+        return complaint;
+    }
 
     /// <summary>
     /// The filter editor for whichever column is chosen, in the terms that column declares.
@@ -500,12 +592,12 @@ internal sealed class TableTabView : DockPanel
     {
         var columns = Columns(_ => true);
         var comparison = new ComboBox { MinWidth = 140 };
-        var first = new TextBox { Width = 160, PlaceholderText = "value" };
-        var second = new TextBox { Width = 160, PlaceholderText = "and", IsVisible = false };
-        var ignoreCase = new CheckBox { Content = "ignore case", IsVisible = false };
+        var first = new TextBox { Width = 160, PlaceholderText = UiText.ValuePlaceholder(language) };
+        var second = new TextBox { Width = 160, PlaceholderText = UiText.AndPlaceholder(language), IsVisible = false };
+        var ignoreCase = new CheckBox { Content = UiText.IgnoreCase(language), IsVisible = false };
         var expected = new TextBlock { Opacity = 0.75, TextWrapping = TextWrapping.Wrap };
-        var complaint = new TextBlock { Foreground = DanglingBrush, TextWrapping = TextWrapping.Wrap, IsVisible = false };
-        var apply = new Button { Content = "Apply", IsEnabled = false };
+        var complaint = Complaint();
+        var apply = new Button { Content = UiText.Apply(language), IsEnabled = false };
 
         var layout = RecordLayout.For(tab.Table);
         var capabilities = session.Capabilities(tab.Table);
@@ -525,7 +617,7 @@ internal sealed class TableTabView : DockPanel
 
             comparison.SelectedIndex = 0;
             ignoreCase.IsVisible = capability.Kind == ColumnQueryKind.Text;
-            expected.Text = "Expects " + FilterInput.Expected(capability, layout.Columns[index], layout) + ".";
+            expected.Text = UiText.Expects(language, FilterInput.Expected(capability, layout.Columns[index], layout, language));
             apply.IsEnabled = true;
         };
 
@@ -548,10 +640,10 @@ internal sealed class TableTabView : DockPanel
             var values = new List<string>();
             foreach (var typed in Typed(chosen, first, second))
             {
-                var reading = FilterInput.For(capability, layout.Columns[index], layout, typed);
+                var reading = FilterInput.For(capability, layout.Columns[index], layout, typed, language);
                 if (!reading.Read)
                 {
-                    complaint.Text = $"'{typed}' is not {reading.Expected}.";
+                    complaint.Text = UiText.IsNot(language, typed, reading.Expected);
                     complaint.IsVisible = true;
                     return;
                 }
@@ -565,8 +657,8 @@ internal sealed class TableTabView : DockPanel
                 // Refused rather than applied as nothing: a filter naming no value would either
                 // show every record or none, and the banner would name it either way.
                 complaint.Text = chosen == FilterComparison.OneOf
-                    ? "Expects one or more values, separated by commas."
-                    : "Expects a value to compare against.";
+                    ? UiText.ExpectsValues(language)
+                    : UiText.ExpectsValue(language);
                 complaint.IsVisible = true;
                 return;
             }
@@ -575,7 +667,7 @@ internal sealed class TableTabView : DockPanel
             Ask(tab.Query with { Filters = [.. tab.Query.Filters, filter] });
         };
 
-        return Editor("Filter", columns, comparison, first, second, ignoreCase, expected, complaint, apply);
+        return Editor(UiText.FilterHeading(language), columns, comparison, first, second, ignoreCase, expected, complaint, apply);
     }
 
     private static IEnumerable<string> Typed(FilterComparison comparison, TextBox first, TextBox second)
@@ -633,22 +725,22 @@ internal sealed class TableTabView : DockPanel
         ],
     };
 
-    private static string Named(FilterComparison comparison) => comparison switch
+    private string Named(FilterComparison comparison) => comparison switch
     {
-        FilterComparison.Equals => "equals",
-        FilterComparison.NotEquals => "does not equal",
-        FilterComparison.LessThan => "less than",
-        FilterComparison.AtMost => "at most",
-        FilterComparison.GreaterThan => "greater than",
-        FilterComparison.AtLeast => "at least",
-        FilterComparison.Between => "between",
-        FilterComparison.Contains => "contains",
-        FilterComparison.StartsWith => "starts with",
-        FilterComparison.EndsWith => "ends with",
-        FilterComparison.Matches => "matches (* and ?)",
-        FilterComparison.OneOf => "one of (comma separated)",
-        FilterComparison.IsEmpty => "is empty",
-        _ => "is not empty",
+        FilterComparison.Equals => UiText.EqualsOp(language),
+        FilterComparison.NotEquals => UiText.NotEqualsOp(language),
+        FilterComparison.LessThan => UiText.LessThanOp(language),
+        FilterComparison.AtMost => UiText.AtMostOp(language),
+        FilterComparison.GreaterThan => UiText.GreaterThanOp(language),
+        FilterComparison.AtLeast => UiText.AtLeastOp(language),
+        FilterComparison.Between => UiText.BetweenOp(language),
+        FilterComparison.Contains => UiText.ContainsOp(language),
+        FilterComparison.StartsWith => UiText.StartsWithOp(language),
+        FilterComparison.EndsWith => UiText.EndsWithOp(language),
+        FilterComparison.Matches => UiText.MatchesOp(language),
+        FilterComparison.OneOf => UiText.OneOfOp(language),
+        FilterComparison.IsEmpty => UiText.IsEmptyOp(language),
+        _ => UiText.IsNotEmptyOp(language),
     };
 
     /// <summary>The sort editor: a column, a direction, and no more than three at once.</summary>
@@ -656,12 +748,12 @@ internal sealed class TableTabView : DockPanel
     {
         var columns = Columns(_ => true);
         var direction = new ComboBox { MinWidth = 140 };
-        direction.Items.Add(new ComboBoxItem { Content = "ascending", Tag = Ordering.Ascending });
-        direction.Items.Add(new ComboBoxItem { Content = "descending", Tag = Ordering.Descending });
+        direction.Items.Add(new ComboBoxItem { Content = UiText.Ascending(language), Tag = Ordering.Ascending });
+        direction.Items.Add(new ComboBoxItem { Content = UiText.Descending(language), Tag = Ordering.Descending });
         direction.SelectedIndex = 0;
 
-        var complaint = new TextBlock { Foreground = DanglingBrush, TextWrapping = TextWrapping.Wrap, IsVisible = false };
-        var apply = new Button { Content = "Apply" };
+        var complaint = Complaint();
+        var apply = new Button { Content = UiText.Apply(language) };
 
         apply.Click += (_, _) =>
         {
@@ -674,9 +766,7 @@ internal sealed class TableTabView : DockPanel
             {
                 // Refused rather than dropping one silently: a person who cannot see which sort
                 // went cannot tell what they are looking at.
-                complaint.Text = string.Create(
-                    CultureInfo.InvariantCulture,
-                    $"Already sorted by {TableQuery.MaximumSorts} columns. Remove one first.");
+                complaint.Text = UiText.SortsFull(language, TableQuery.MaximumSorts);
                 complaint.IsVisible = true;
                 return;
             }
@@ -686,7 +776,7 @@ internal sealed class TableTabView : DockPanel
             Ask(tab.Query with { Sorts = [.. tab.Query.Sorts, new ColumnSort(index, chosen)] });
         };
 
-        return Editor("Sort by", columns, direction, complaint, apply);
+        return Editor(UiText.SortHeading(language), columns, direction, complaint, apply);
     }
 
     /// <summary>The figure editor: a column, and what to compute over the records in view.</summary>
@@ -694,7 +784,7 @@ internal sealed class TableTabView : DockPanel
     {
         var columns = Columns(_ => true);
         var figure = new ComboBox { MinWidth = 140 };
-        var apply = new Button { Content = "Apply", IsEnabled = false };
+        var apply = new Button { Content = UiText.Apply(language), IsEnabled = false };
         var capabilities = session.Capabilities(tab.Table);
 
         columns.SelectionChanged += (_, _) =>
@@ -725,7 +815,7 @@ internal sealed class TableTabView : DockPanel
             Total([.. tab.Figures, new ColumnFigure(index, chosen)]);
         };
 
-        return Editor("Figure", columns, figure, apply);
+        return Editor(UiText.FigureHeading(language), columns, figure, apply);
     }
 
     /// <summary>
@@ -792,10 +882,10 @@ internal sealed class TableTabView : DockPanel
         }
     }
 
-    private static Control NotReady() =>
+    private Control NotReady() =>
         new TextBlock
         {
-            Text = "This table is still being read. It will be shown as soon as it has been.",
+            Text = UiText.TableNotReady(language),
             TextWrapping = TextWrapping.Wrap,
             Margin = new Thickness(12),
         };
@@ -815,6 +905,7 @@ internal sealed class TableTabView : DockPanel
         // it is not.
         var table = new TableView { ItemsSource = tab.Rows ?? view.Rows };
         table.AddHandler(PointerReleasedEvent, OnPointerReleased, RoutingStrategies.Tunnel);
+        table.ContextRequested += OnContextRequested;
 
         // Compiled bindings rather than property paths: a path is resolved by reflection when the
         // cell is realised, which trimming cannot see and may break. See the change's design.md D4.
@@ -826,7 +917,7 @@ internal sealed class TableTabView : DockPanel
         });
         table.Columns.Add(new TableViewColumn
         {
-            Header = "Record",
+            Header = UiText.RecordColumn(language),
             Width = new GridLength(90),
             Binding = CompiledBinding.Create((RecordRow row) => row.Ordinal),
         });
@@ -872,7 +963,7 @@ internal sealed class TableTabView : DockPanel
     /// is not, so marking from findings would stop at the fiftieth and leave the fifty-first
     /// looking sound. See the change's design.md D7.
     /// </remarks>
-    private static IDataTemplate CellTemplate(int index, IReadOnlyList<string> leadsTo)
+    private IDataTemplate CellTemplate(int index, IReadOnlyList<string> leadsTo)
     {
         var leads = string.Join(", ", leadsTo);
         return new FuncDataTemplate<RecordRow>(
@@ -884,17 +975,18 @@ internal sealed class TableTabView : DockPanel
                 }
 
                 var dangling = row.RefersToNothing(index);
-                return new TextBlock
+                var text = new TextBlock
                 {
                     Text = row.Values[index],
-                    Foreground = dangling ? DanglingBrush : LinkBrush,
                     Cursor = HandCursor,
                     TextDecorations = dangling ? TextDecorations.Strikethrough : TextDecorations.Underline,
                     VerticalAlignment = VerticalAlignment.Center,
                     [ToolTip.TipProperty] = dangling
-                        ? $"Refers to '{leads}', which holds no such record."
-                        : $"Follows to '{leads}'.",
+                        ? UiText.RefersToNothing(language, leads)
+                        : UiText.FollowsTo(language, leads),
                 };
+                text[!TextBlock.ForegroundProperty] = new DynamicResourceExtension(dangling ? ReaderTheme.Danger : ReaderTheme.Primary);
+                return text;
             },
             supportsRecycling: true);
     }
@@ -905,8 +997,8 @@ internal sealed class TableTabView : DockPanel
         list.Children.Add(new TextBlock
         {
             Text = view.Kind == TableViewKind.Failed
-                ? "This table could not be read, so its data is not shown. The rest of the export is unaffected."
-                : "This table does not conform to its declaration, so its data is not shown.",
+                ? UiText.TableUnreadable(language)
+                : UiText.TableNotConformant(language),
             TextWrapping = TextWrapping.Wrap,
         });
 
@@ -914,7 +1006,7 @@ internal sealed class TableTabView : DockPanel
         {
             list.Children.Add(new TextBlock
             {
-                Text = finding.Code + "  " + MessageCatalogue.Render(finding, ReportLanguage.English),
+                Text = finding.Code + "  " + MessageCatalogue.Render(finding, language),
                 TextWrapping = TextWrapping.Wrap,
             });
         }
@@ -925,8 +1017,7 @@ internal sealed class TableTabView : DockPanel
             // table had been fully described.
             list.Children.Add(new TextBlock
             {
-                Text = "Analysis of this table stopped at its limit. It may hold further defects "
-                    + "that were not looked for.",
+                Text = UiText.TruncatedNotice(language),
                 TextWrapping = TextWrapping.Wrap,
                 FontStyle = FontStyle.Italic,
             });
@@ -936,7 +1027,7 @@ internal sealed class TableTabView : DockPanel
     }
 
     /// <summary>
-    /// Follows a reference from the cell that was acted on, or offers the ones that lead back.
+    /// Follows a reference from the cell that was acted on.
     /// </summary>
     /// <remarks>
     /// The unit of navigation is the foreign key, not the cell: acting on any of a composite
@@ -944,7 +1035,10 @@ internal sealed class TableTabView : DockPanel
     /// </remarks>
     private void OnPointerReleased(object? sender, PointerReleasedEventArgs args)
     {
-        if (sender is not TableView table || args.Source is not Visual source)
+        // A right click asks for the record's context, which OnContextRequested answers.
+        if (sender is not TableView table
+            || args.Source is not Visual source
+            || args.InitialPressMouseButton == MouseButton.Right)
         {
             return;
         }
@@ -963,12 +1057,25 @@ internal sealed class TableTabView : DockPanel
             return;
         }
 
-        if (args.InitialPressMouseButton == MouseButton.Right)
+        follow(tab.Table, row, index);
+    }
+
+    /// <summary>Offers the tables whose records refer to the record a context was asked for on.</summary>
+    /// <remarks>
+    /// Found from the row rather than the cell, so asking beside a record's values offers that
+    /// record's referrers as surely as asking on them: a click there lands on the row, and once
+    /// went unanswered here while the grid reopened a menu built for another record.
+    /// </remarks>
+    private void OnContextRequested(object? sender, ContextRequestedEventArgs args)
+    {
+        if (sender is not TableView table
+            || args.Source is not Visual source
+            || source.GetSelfAndVisualAncestors().OfType<TableViewRow>().FirstOrDefault()?.DataContext is not RecordRow row)
         {
-            offerReferrers(tab.Table, row, table);
             return;
         }
 
-        follow(tab.Table, row, index);
+        args.Handled = true;
+        offerReferrers(tab.Table, row, table);
     }
 }

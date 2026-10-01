@@ -1,9 +1,11 @@
 using System.Globalization;
 using Avalonia;
+using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Layout;
+using Avalonia.Markup.Xaml.MarkupExtensions;
 using Avalonia.Media;
 using Avalonia.Platform.Storage;
 using Avalonia.Styling;
@@ -36,6 +38,11 @@ public sealed class MainWindow : Window
     private readonly TabItem startPageTab;
     private readonly StartPageView startPage = new();
 
+    private readonly PreferencesStore preferencesStore;
+    private UserPreferences preferences;
+    private readonly LocalizedTexts menuHeaders;
+    private LocalizedTexts navigatorHeadings;
+
     private readonly ReaderWorkspace workspace;
     private ReaderTabs? model;
     private readonly Dictionary<TableNode, TabItem> items = [];
@@ -53,7 +60,7 @@ public sealed class MainWindow : Window
     private bool syncing;
 
     /// <summary>
-    /// The windows the Help menu opened that are still open, by title, so that choosing an entry
+    /// The windows the Help menu opened that are still open, by key, so that choosing an entry
     /// again brings its window forward rather than opening a second.
     /// </summary>
     private readonly Dictionary<string, Window> beside = new(StringComparer.Ordinal);
@@ -64,21 +71,33 @@ public sealed class MainWindow : Window
     {
     }
 
-    /// <summary>The same, with stores placed where the options say, for tests.</summary>
-    internal MainWindow(string? exportPath, StoreOptions? options)
+    /// <summary>
+    /// The same, with stores placed where the options say and preferences kept where the store
+    /// says, for tests.
+    /// </summary>
+    internal MainWindow(string? exportPath, StoreOptions? options, PreferencesStore? preferencesStore = null)
     {
+        // Read once, here: the window owns the preferences, and puts into effect the parts the
+        // application holds — its theme, and on macOS its menu.
+        this.preferencesStore = preferencesStore ?? new PreferencesStore();
+        preferences = this.preferencesStore.Load();
+        menuHeaders = new LocalizedTexts(preferences.Language);
+        navigatorHeadings = new LocalizedTexts(preferences.Language);
         workspace = new ReaderWorkspace(options);
         if (Application.Current is App application)
         {
             application.Reader = this;
+            application.UpdateApplicationMenuLanguage(preferences.Language);
         }
+
+        ApplyTheme();
 
         Title = "GoBD Reader";
         Icon = ReaderIcon.ForWindow();
         Width = 1280;
         Height = 800;
 
-        // The Fluent theme sizes a tab header for a handful of top-level sections, at 24 point.
+        // A theme sizes a tab header for a handful of top-level sections.
         // A tab here names a table, there is one per table a person has opened, and the strip has
         // to stay readable at a dozen of them — so the strip is sized like a document's tabs
         // rather than like a page's sections. Set as a style so every tab gets it, including the
@@ -98,7 +117,8 @@ public sealed class MainWindow : Window
             },
         });
 
-        startPageTab = new TabItem { Header = "Summary", Content = startPage };
+        startPageTab = new TabItem { Header = UiText.SummaryTab(preferences.Language), Content = startPage };
+        startPage.SetLanguage(preferences.Language);
         tabs.Items.Add(startPageTab);
         tabs.SelectedItem = startPageTab;
         tabs.SelectionChanged += (_, _) => OnTabChanged();
@@ -110,9 +130,16 @@ public sealed class MainWindow : Window
             ColumnDefinitions = new ColumnDefinitions("Auto,*"),
         };
 
-        Avalonia.Controls.Grid.SetColumn(navigator, 0);
+        var navContainer = new Border
+        {
+            BorderThickness = new Thickness(0, 0, 1, 0),
+            Child = navigator,
+        };
+        navContainer[!Border.BorderBrushProperty] = new DynamicResourceExtension(ReaderTheme.Border);
+
+        Avalonia.Controls.Grid.SetColumn(navContainer, 0);
         Avalonia.Controls.Grid.SetColumn(tabs, 1);
-        layout.Children.Add(navigator);
+        layout.Children.Add(navContainer);
         layout.Children.Add(tabs);
 
         // Renders the window's menu inside the window on Windows and Linux. On macOS the menu
@@ -126,7 +153,7 @@ public sealed class MainWindow : Window
 
         navigator.SelectionChanged += (_, _) => OnNavigatorChanged();
 
-        startPage.ShowNothingOpened("Open a GoBD export with File → Open Archive… or Open Folder…");
+        startPage.ShowNothingOpened();
 
         // The command line and the picker arrive at the same place, so a scripted run and a
         // person choosing a medium see the same reader.
@@ -164,11 +191,11 @@ public sealed class MainWindow : Window
 
         if (result.Outcome == OpenOutcome.Refused)
         {
-            var reason = result.Refusal is { } refusal
-                ? Describe(refusal)
-                : string.Join(
-                    "\n",
-                    result.Findings.Select(finding => MessageCatalogue.Render(finding, ReportLanguage.English)));
+            // Said in whichever language is chosen, then and later: the page keeps how to say it
+            // rather than what it said.
+            Func<ReportLanguage, string> reason = result.Refusal is { } refusal
+                ? language => Describe(refusal, language)
+                : language => string.Join("\n", result.Findings.Select(finding => MessageCatalogue.Render(finding, language)));
 
             if (Session is null)
             {
@@ -177,7 +204,7 @@ public sealed class MainWindow : Window
             else
             {
                 Select(startPageTab);
-                startPage.ShowRefusal("That could not be opened, so the open export stays open. " + reason);
+                startPage.ShowRefusal(language => UiText.KeptOpen(language) + " " + reason(language));
             }
 
             return;
@@ -185,7 +212,7 @@ public sealed class MainWindow : Window
 
         Reset();
         var opened = workspace.Session!;
-        model = new ReaderTabs(opened);
+        model = new ReaderTabs(opened) { Language = preferences.Language };
         Title = "GoBD Reader — " + workspace.ExportPath;
         BuildNavigator(opened);
         startPage.Show(opened.Reading, workspace.ExportPath);
@@ -227,14 +254,15 @@ public sealed class MainWindow : Window
     /// </remarks>
     private void BuildNavigator(ReaderSession opened)
     {
+        navigatorHeadings = new LocalizedTexts(preferences.Language);
         foreach (var medium in opened.Navigator)
         {
             var node = new TreeViewItem { Header = medium.Name, IsExpanded = true };
             foreach (var entry in medium.Tables)
             {
                 var item = new TreeViewItem { Header = entry.Identity, Tag = entry.Table };
-                Add(item, "References", entry.Relationships.References, "→ ");
-                Add(item, "Referenced by", entry.Relationships.ReferencedBy, "← ");
+                Add(item, UiText.References, entry.Relationships.References, "→ ");
+                Add(item, UiText.ReferencedBy, entry.Relationships.ReferencedBy, "← ");
                 node.Items.Add(item);
                 navigatorItems[entry.Table] = item;
             }
@@ -243,9 +271,9 @@ public sealed class MainWindow : Window
         }
     }
 
-    private static void Add(
+    private void Add(
         TreeViewItem table,
-        string heading,
+        Func<ReportLanguage, string> heading,
         IReadOnlyList<TableRelationship> related,
         string arrow)
     {
@@ -254,7 +282,8 @@ public sealed class MainWindow : Window
             return;
         }
 
-        var group = new TreeViewItem { Header = heading, Tag = heading };
+        var group = new TreeViewItem();
+        navigatorHeadings.Follow(text => group.Header = text, heading);
         foreach (var relationship in related)
         {
             group.Items.Add(new TreeViewItem { Header = arrow + relationship.Label, Tag = relationship });
@@ -297,7 +326,7 @@ public sealed class MainWindow : Window
         var tab = model.Open(table);
         if (!items.TryGetValue(table, out var item))
         {
-            var view = new TableTabView(current, tab, Follow, OfferReferrers, Step);
+            var view = new TableTabView(current, tab, Follow, OfferReferrers, Step, preferences.Language);
             var preparation = new ViewPreparation(current, tab.Lane);
             preparations[tab.Table] = preparation;
 
@@ -401,17 +430,25 @@ public sealed class MainWindow : Window
         };
 
         close.Click += (_, _) => CloseTab(table);
+        AutomationProperties.SetName(close, UiText.CloseTab(preferences.Language, table.Identity));
 
-        return new StackPanel
+        var header = new StackPanel
         {
             Orientation = Orientation.Horizontal,
-            Spacing = 4,
+            Spacing = 8,
             Children =
             {
-                new TextBlock { Text = table.Identity, VerticalAlignment = VerticalAlignment.Center },
+                new TextBlock
+                {
+                    Text = table.Identity,
+                    VerticalAlignment = VerticalAlignment.Center,
+                    FontWeight = FontWeight.Medium,
+                },
                 close,
             },
         };
+        AutomationProperties.SetName(header, UiText.TableTab(preferences.Language, table.Identity));
+        return header;
     }
 
     /// <summary>Closes one table's tab, leaving every other tab as it was.</summary>
@@ -538,7 +575,7 @@ public sealed class MainWindow : Window
             return;
         }
 
-        var menu = new ContextMenu();
+        var menu = new MenuFlyout();
         foreach (var referrer in referrers)
         {
             if (ResolvedForeignKey.Resolve(referrer.ForeignKey, referrer.Other, from) is not { } key)
@@ -546,7 +583,7 @@ public sealed class MainWindow : Window
                 continue;
             }
 
-            var item = new MenuItem { Header = "Records in '" + referrer.Other.Identity + "' referring to this" };
+            var item = new MenuItem { Header = UiText.ReferrersMenu(preferences.Language, referrer.Other.Identity) };
             item.Click += (_, _) =>
             {
                 var navigation = current.FollowBack(from, row.Ordinal, key);
@@ -556,8 +593,9 @@ public sealed class MainWindow : Window
             menu.Items.Add(item);
         }
 
-        anchor.ContextMenu = menu;
-        menu.Open(anchor);
+        // Shown rather than attached: a menu set as the grid's context menu stays there, and the
+        // grid reopens it — built for this record — on the next request it does not answer.
+        menu.ShowAt(anchor, showAtPointer: true);
     }
 
     /// <summary>Moves one referring record along the walk the tab in front is stepping through.</summary>
@@ -639,51 +677,44 @@ public sealed class MainWindow : Window
         var command = OperatingSystem.IsMacOS() ? KeyModifiers.Meta : KeyModifiers.Control;
         var archiveGesture = new KeyGesture(Key.O, command);
         var folderGesture = new KeyGesture(Key.O, command | KeyModifiers.Shift);
+        var settingsGesture = new KeyGesture(Key.OemComma, command);
 
-        var openArchive = new NativeMenuItem { Header = "Open Archive…", Gesture = archiveGesture };
+        var openArchive = menuHeaders.Follow(new NativeMenuItem { Gesture = archiveGesture }, UiText.OpenArchive);
         openArchive.Click += async (_, _) => await PickArchiveAsync();
 
-        var openFolder = new NativeMenuItem { Header = "Open Folder…", Gesture = folderGesture };
+        var openFolder = menuHeaders.Follow(new NativeMenuItem { Gesture = folderGesture }, UiText.OpenFolder);
         openFolder.Click += async (_, _) => await PickFolderAsync();
 
         var fileMenu = new NativeMenu();
         fileMenu.Items.Add(openArchive);
         fileMenu.Items.Add(openFolder);
 
+        // Settings sit in the application menu on macOS, which App sets, and in File elsewhere.
+        if (!OperatingSystem.IsMacOS())
+        {
+            var settings = menuHeaders.Follow(new NativeMenuItem { Gesture = settingsGesture }, UiText.SettingsMenu);
+            settings.Click += (_, _) => ShowSettings();
+            fileMenu.Items.Add(new NativeMenuItemSeparator());
+            fileMenu.Items.Add(settings);
+        }
+
         // What the reader is, and under what terms: it reaches a person as one file or one
         // application, so it says so itself. See the prepare-public-release change's design.md D5.
         var helpMenu = new NativeMenu();
-        helpMenu.Items.Add(new NativeMenuItem
-        {
-            Header = LicenceTitle,
-            Command = new ActionCommand(() => ShowText(LicenceTitle, () => LicenceTexts.Licence)),
-        });
-        helpMenu.Items.Add(new NativeMenuItem
-        {
-            Header = NoticeTitle,
-            Command = new ActionCommand(() => ShowText(NoticeTitle, () => LicenceTexts.Notice)),
-        });
-        helpMenu.Items.Add(new NativeMenuItem
-        {
-            Header = NoticesTitle,
-            Command = new ActionCommand(() => ShowText(NoticesTitle, () => LicenceTexts.ThirdPartyNotices)),
-        });
-        var about = new NativeMenuItem
-        {
-            Header = AboutTitle,
-            Command = new ActionCommand(ShowAbout),
-        };
+        helpMenu.Items.Add(menuHeaders.Follow(new NativeMenuItem { Command = new ActionCommand(ShowLicence) }, UiText.Licence));
+        helpMenu.Items.Add(menuHeaders.Follow(new NativeMenuItem { Command = new ActionCommand(ShowNotice) }, UiText.Notice));
+        helpMenu.Items.Add(menuHeaders.Follow(new NativeMenuItem { Command = new ActionCommand(ShowNotices) }, UiText.ThirdPartyNotices));
 
         // What an application says about itself belongs in the application menu on macOS, which
         // App sets while the application initialises, and in Help everywhere else.
         if (!OperatingSystem.IsMacOS())
         {
-            helpMenu.Items.Add(about);
+            helpMenu.Items.Add(menuHeaders.Follow(new NativeMenuItem { Command = new ActionCommand(ShowAbout) }, UiText.About));
         }
 
         var menu = new NativeMenu();
-        menu.Items.Add(new NativeMenuItem { Header = "File", Menu = fileMenu });
-        menu.Items.Add(new NativeMenuItem { Header = "Help", Menu = helpMenu });
+        menu.Items.Add(menuHeaders.Follow(new NativeMenuItem { Menu = fileMenu }, UiText.FileMenu));
+        menu.Items.Add(menuHeaders.Follow(new NativeMenuItem { Menu = helpMenu }, UiText.HelpMenu));
         NativeMenu.SetMenu(this, menu);
 
         if (!OperatingSystem.IsMacOS())
@@ -700,55 +731,114 @@ public sealed class MainWindow : Window
                     args.Handled = true;
                     await PickFolderAsync();
                 }
+                else if (settingsGesture.Matches(args))
+                {
+                    args.Handled = true;
+                    ShowSettings();
+                }
             };
         }
     }
 
-    internal const string LicenceTitle = "Licence";
+    // Which window beside this one is which, whatever language its title is in.
+    private const string SettingsWindowKey = "settings";
+    private const string AboutWindowKey = "about";
+    private const string LicenceWindowKey = "licence";
+    private const string NoticeWindowKey = "notice";
+    private const string NoticesWindowKey = "notices";
 
-    internal const string NoticeTitle = "Notice";
+    /// <summary>Shows the settings window.</summary>
+    internal void ShowSettings() => ShowBeside(
+        SettingsWindowKey,
+        () => new SettingsWindow(preferencesStore, preferences, OnPreferencesChanged));
 
-    internal const string NoticesTitle = "Third-party notices";
+    private void OnPreferencesChanged(UserPreferences updated)
+    {
+        var languageChanged = updated.Language != preferences.Language;
+        preferences = updated;
+        ApplyTheme();
 
-    internal const string AboutTitle = "About GoBD Reader";
+        if (languageChanged)
+        {
+            ApplyLanguage(preferences.Language);
+        }
+    }
+
+    /// <summary>Puts the chosen theme into effect, for every window the application shows.</summary>
+    private void ApplyTheme()
+    {
+        if (Application.Current is { } app)
+        {
+            app.RequestedThemeVariant = preferences.Theme.ToThemeVariant();
+        }
+    }
+
+    internal void ApplyLanguage(ReportLanguage lang)
+    {
+        startPageTab.Header = UiText.SummaryTab(lang);
+        startPage.SetLanguage(lang);
+
+        if (model is not null)
+        {
+            model.Language = lang;
+        }
+
+        foreach (var (table, item) in items)
+        {
+            item.Header = Header(table);
+            ((TableTabView)item.Content!).SetLanguage(lang);
+        }
+
+        menuHeaders.Apply(lang);
+        navigatorHeadings.Apply(lang);
+        (Application.Current as App)?.UpdateApplicationMenuLanguage(lang);
+
+        foreach (var window in beside.Values.OfType<ILocalized>())
+        {
+            window.SetLanguage(lang);
+        }
+    }
 
     /// <summary>Shows what the reader is, from the Help menu or from the application menu.</summary>
     internal void ShowAbout() => ShowBeside(
-        AboutTitle,
-        () => new AboutWindow(
-            () => ShowText(LicenceTitle, () => LicenceTexts.Licence),
-            () => ShowText(NoticeTitle, () => LicenceTexts.Notice),
-            () => ShowText(NoticesTitle, () => LicenceTexts.ThirdPartyNotices)));
+        AboutWindowKey,
+        () => new AboutWindow(ShowLicence, ShowNotice, ShowNotices, preferences.Language));
+
+    private void ShowLicence() => ShowText(LicenceWindowKey, UiText.Licence, () => LicenceTexts.Licence);
+
+    private void ShowNotice() => ShowText(NoticeWindowKey, UiText.Notice, () => LicenceTexts.Notice);
+
+    private void ShowNotices() => ShowText(NoticesWindowKey, UiText.ThirdPartyNotices, () => LicenceTexts.ThirdPartyNotices);
 
     /// <summary>
     /// Shows a window of its own beside this one, or brings forward the one already open under
-    /// that title.
+    /// that key.
     /// </summary>
-    private void ShowBeside(string title, Func<Window> create)
+    private void ShowBeside(string key, Func<Window> create)
     {
-        if (beside.TryGetValue(title, out var open))
+        if (beside.TryGetValue(key, out var open))
         {
             open.Activate();
             return;
         }
 
         var window = create();
-        window.Closed += (_, _) => beside.Remove(title);
-        beside[title] = window;
+        window.Closed += (_, _) => beside.Remove(key);
+        beside[key] = window;
         window.Show(this);
     }
 
     /// <summary>Shows a text in a window of its own beside this one.</summary>
-    private void ShowText(string title, Func<string> text) =>
-        ShowBeside(title, () => new TextWindow(title, text()));
+    private void ShowText(string key, Func<ReportLanguage, string> title, Func<string> text) =>
+        ShowBeside(key, () => new TextWindow(title, preferences.Language, text()));
 
     private async Task PickArchiveAsync()
     {
         var files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
         {
-            Title = "Open a GoBD export (ZIP archive)",
+            Title = UiText.PickArchiveTitle(preferences.Language),
             AllowMultiple = false,
-            FileTypeFilter = [new FilePickerFileType("ZIP archive") { Patterns = ["*.zip"] }],
+            FileTypeFilter = [new FilePickerFileType(UiText.ZipArchive(preferences.Language)) { Patterns = ["*.zip"] }],
         });
 
         OpenExport(files.Count > 0 ? files[0].TryGetLocalPath() : null);
@@ -758,7 +848,7 @@ public sealed class MainWindow : Window
     {
         var folders = await StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
         {
-            Title = "Open a GoBD export (folder containing index.xml)",
+            Title = UiText.PickFolderTitle(preferences.Language),
             AllowMultiple = false,
         });
 
@@ -800,31 +890,25 @@ public sealed class MainWindow : Window
     /// which directory it is. See the prepare-public-release change's design.md D6.
     /// </para>
     /// </remarks>
-    internal static string Describe(StoreRefusal refusal) => refusal switch
+    internal static string Describe(StoreRefusal refusal, ReportLanguage language) => refusal switch
     {
-        NotEnoughSpace space => DescribeSpace(space),
+        NotEnoughSpace space => DescribeSpace(space, language),
         LocationNotPrivate { Problem: StorePrivacyProblem.ReadableByOthers } location =>
-            $"The reader keeps an export's data in {location.Directory}, but other accounts can read that "
-            + "directory. Remove it, or start the reader with TMPDIR set to a directory of your own.",
+            UiText.StoreReadableByOthers(language, location.Directory),
         LocationNotPrivate { Problem: StorePrivacyProblem.SymbolicLink } location =>
-            $"The reader keeps an export's data in {location.Directory}, but that is a symbolic link, which "
-            + "could lead the data anywhere. Remove it, or start the reader with TMPDIR set to a directory "
-            + "of your own.",
-        LocationNotPrivate location =>
-            $"The reader keeps an export's data in {location.Directory}, but it cannot use that: the "
-            + "directory belongs to another account, or something else is in its place. Start the reader "
-            + "with TMPDIR set to a directory of your own.",
+            UiText.StoreSymbolicLink(language, location.Directory),
+        LocationNotPrivate location => UiText.StoreUnusable(language, location.Directory),
         _ => throw new ArgumentOutOfRangeException(nameof(refusal), refusal, "A refusal of no known kind."),
     };
 
-    private static string DescribeSpace(NotEnoughSpace refusal)
+    private static string DescribeSpace(NotEnoughSpace refusal, ReportLanguage language)
     {
-        var needed = (refusal.RequiredBytes / 1024 / 1024).ToString(CultureInfo.InvariantCulture);
-        var free = (refusal.AvailableBytes / 1024 / 1024).ToString(CultureInfo.InvariantCulture);
-        var where = refusal.MemoryBacked
-            ? " That volume is memory rather than disk, so the store belongs elsewhere."
-            : string.Empty;
+        var space = UiText.StoreSpace(
+            language,
+            refusal.RequiredBytes / 1024 / 1024,
+            refusal.VolumeRoot,
+            refusal.AvailableBytes / 1024 / 1024);
 
-        return $"The store needs about {needed} MB and {refusal.VolumeRoot} has {free} MB free.{where}";
+        return refusal.MemoryBacked ? space + " " + UiText.MemoryBacked(language) : space;
     }
 }

@@ -564,22 +564,11 @@ public sealed class ReaderSession : IDisposable
                 var name = layout.Columns[column.Index].Name;
                 if (column.Limitation == ColumnLimitation.NumberTooLarge)
                 {
-                    found.Add(new ReaderNotice(
-                        table,
-                        name,
-                        $"'{name}' holds numbers with more digits than this reader computes with exactly, so it"
-                        + " offers no filter, sort or figure for that column. Every value is still shown as the"
-                        + " file writes it."));
+                    found.Add(new ReaderNotice(table, name, ReaderLimit.NumberTooLarge));
                 }
                 else if (column.Kind == ColumnQueryKind.Time && column.ValuesNotTimes > 0)
                 {
-                    found.Add(new ReaderNotice(
-                        table,
-                        name,
-                        string.Create(
-                            CultureInfo.InvariantCulture,
-                            $"'{name}' declares a time, and {column.ValuesNotTimes} of its values cannot be read")
-                        + " as one. Filtering, sorting and figures treat those as absent."));
+                    found.Add(new ReaderNotice(table, name, ReaderLimit.ValuesNotTimes, column.ValuesNotTimes));
                 }
             }
         }

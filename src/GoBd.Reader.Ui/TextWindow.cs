@@ -8,6 +8,7 @@ using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Styling;
 using GoBd.Reader.Ui.Controls;
+using GoBd.Validation.Localisation;
 
 namespace GoBd.Reader.Ui;
 
@@ -29,14 +30,24 @@ namespace GoBd.Reader.Ui;
 /// design.md D5.
 /// </para>
 /// </remarks>
-internal sealed class TextWindow : Window
+internal sealed class TextWindow : Window, ILocalized
 {
+    private readonly Func<ReportLanguage, string>? title;
+
     /// <summary>Lines beyond which a text is shown as a virtualised list rather than one block.</summary>
     /// <remarks>
     /// Well above the licence and what it does not cover, and far below the notices. A text of a
     /// few hundred lines lays out in one pass without being felt.
     /// </remarks>
     internal const int LinesBeyondWhichItIsAList = 400;
+
+    /// <summary>Creates the window with a title that follows the display language, and its text.</summary>
+    /// <remarks>Only the title: the texts themselves are the licence and notices as written.</remarks>
+    public TextWindow(Func<ReportLanguage, string> title, ReportLanguage language, string text)
+        : this(title(language), text)
+    {
+        this.title = title;
+    }
 
     /// <summary>Creates the window with its title and text.</summary>
     public TextWindow(string title, string text)
@@ -102,6 +113,15 @@ internal sealed class TextWindow : Window
 
         Content = Lines;
         KeyDown += OnKeyDown;
+    }
+
+    /// <inheritdoc />
+    public void SetLanguage(ReportLanguage language)
+    {
+        if (title is not null)
+        {
+            Title = title(language);
+        }
     }
 
     /// <summary>The text being shown, however it is shown.</summary>

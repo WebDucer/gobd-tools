@@ -1,6 +1,7 @@
 using GoBd.Reader.Data;
 using GoBd.Validation.Content;
 using GoBd.Validation.Tests.Content;
+using GoBd.Validation.Localisation;
 
 namespace GoBd.Validation.Tests.Reader;
 
@@ -159,5 +160,17 @@ public sealed class FilterInputTests
 
         reading.Read.ShouldBeTrue();
         reading.Value.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public void TheFormExpectedIsSaidInTheLanguageAskedForWithTheDeclarationsOwnSymbols()
+    {
+        var layout = ContentHarness.Layout(Table(Amount, German));
+        var capability = new ColumnCapability(0, ColumnQueryKind.Number, 2, 0, ColumnLimitation.None);
+
+        FilterInput.Expected(capability, layout.Columns[0], layout, ReportLanguage.German)
+            .ShouldBe("eine Zahl, Dezimalstellen nach ',', Tausender gruppiert durch '.'");
+        FilterInput.For(capability, layout.Columns[0], layout, "ungefähr 100", ReportLanguage.German)
+            .Expected.ShouldStartWith("eine Zahl");
     }
 }

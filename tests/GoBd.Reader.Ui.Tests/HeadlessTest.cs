@@ -1,5 +1,8 @@
 using System.Reflection;
+using Avalonia;
+using Avalonia.Controls;
 using Avalonia.Headless;
+using GoBd.Validation.Localisation;
 
 namespace GoBd.Reader.Ui.Tests;
 
@@ -32,4 +35,47 @@ public abstract class HeadlessTest
     /// <summary>Runs a test body on the dispatcher, and reports what it threw.</summary>
     protected static Task Ui(Action body) =>
         Session.Dispatch(body, TestContext.Current.CancellationToken);
+
+    /// <summary>
+    /// Runs a test body that changes what the whole application holds — its theme, and on macOS
+    /// its menu's language — and puts both back after, because every test shares the one
+    /// application and the next one must not find it dark or in German.
+    /// </summary>
+    protected static void RestoringApplication(Action body)
+    {
+        ArgumentNullException.ThrowIfNull(body);
+
+        var application = Application.Current.ShouldNotBeNull();
+        var theme = application.RequestedThemeVariant;
+        try
+        {
+            body();
+        }
+        finally
+        {
+            application.RequestedThemeVariant = theme;
+            (application as App)?.UpdateApplicationMenuLanguage(ReportLanguage.English);
+        }
+    }
+
+    /// <summary>
+    /// Shows a window for the length of a test body, and closes it after, so no window outlives
+    /// the test that opened it in the session every test shares.
+    /// </summary>
+    protected static void WithWindow<T>(T window, Action<T> body)
+        where T : Window
+    {
+        ArgumentNullException.ThrowIfNull(window);
+        ArgumentNullException.ThrowIfNull(body);
+
+        window.Show();
+        try
+        {
+            body(window);
+        }
+        finally
+        {
+            window.Close();
+        }
+    }
 }
