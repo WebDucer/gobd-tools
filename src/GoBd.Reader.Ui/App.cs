@@ -38,6 +38,8 @@ public sealed class App : Application
         Name = "GoBD Reader";
         var semi = new SemiTheme();
         Styles.Add(semi);
+        Styles.Add(ReaderTheme.CreateStyles());
+        ReaderTheme.AddColours(Resources, semi);
         Resources[typeof(TableView)] = ReaderTheme.CreateTableViewTheme(
             semi.TryGetResource(typeof(TableView), null, out var semiTableView) ? semiTableView as ControlTheme : null);
 
@@ -60,7 +62,7 @@ public sealed class App : Application
             applicationMenu.Items.Add(applicationMenuHeaders.Follow(
                 new NativeMenuItem
                 {
-                    Gesture = new KeyGesture(Key.OemComma, KeyModifiers.Meta),
+                    Gesture = ReaderKeys.Settings.Mac[0],
                     Command = new ActionCommand(() => Reader?.ShowSettings()),
                 },
                 UiText.SettingsMenu));

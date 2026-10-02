@@ -357,4 +357,99 @@ public sealed class ReaderTabsTests
             .Single(entry => ReferenceEquals(entry.Other, referring));
         return ResolvedForeignKey.Resolve(relationship.ForeignKey, referring, referenced).ShouldNotBeNull();
     }
+
+    // ---- Back and forward ----------------------------------------------------------------------
+
+    [Fact]
+    public void ANavigationIsRememberedFromWhereItStartedToWhatItReached()
+    {
+        using var harness = Export();
+        using var session = Read(harness);
+        var tabs = new ReaderTabs(session);
+        var orders = Table(session, "Bestellungen");
+        var customers = Table(session, "Kunden");
+        var key = session.KeysAt(orders, 1).ShouldHaveSingleItem();
+
+        tabs.History.CanGoBack.ShouldBeFalse();
+        tabs.Remember(orders, 2, session.Follow(orders, 2, key));
+
+        tabs.History.Places.ShouldBe([new Place(orders, 2), new Place(customers, 2)]);
+        tabs.History.CanGoBack.ShouldBeTrue();
+        tabs.History.CanGoForward.ShouldBeFalse();
+
+        tabs.History.Back().ShouldBe(new Place(orders, 2));
+        tabs.History.CanGoBack.ShouldBeFalse();
+        tabs.History.Forward().ShouldBe(new Place(customers, 2));
+        tabs.History.Forward().ShouldBeNull();
+    }
+
+    [Fact]
+    public void FollowingOnFromWhereTheHistoryStandsRemembersEachPlaceOnce()
+    {
+        using var harness = Export();
+        using var session = Read(harness);
+        var tabs = new ReaderTabs(session);
+        var orders = Table(session, "Bestellungen");
+        var customers = Table(session, "Kunden");
+        var key = session.KeysAt(orders, 1).ShouldHaveSingleItem();
+
+        tabs.Remember(orders, 1, session.Follow(orders, 1, key));
+        tabs.Remember(customers, 1, tabs.Reach(customers, 3).ShouldNotBeNull());
+
+        tabs.History.Places.ShouldBe([new Place(orders, 1), new Place(customers, 1), new Place(customers, 3)]);
+    }
+
+    [Fact]
+    public void ANewNavigationAfterGoingBackDiscardsWhatForwardWouldHaveReached()
+    {
+        using var harness = Export();
+        using var session = Read(harness);
+        var tabs = new ReaderTabs(session);
+        var orders = Table(session, "Bestellungen");
+        var customers = Table(session, "Kunden");
+        var key = session.KeysAt(orders, 1).ShouldHaveSingleItem();
+
+        tabs.Remember(orders, 1, session.Follow(orders, 1, key));
+        tabs.History.Back();
+        tabs.Remember(orders, 1, tabs.Reach(orders, 3).ShouldNotBeNull());
+
+        tabs.History.Places.ShouldBe([new Place(orders, 1), new Place(orders, 3)]);
+        tabs.History.CanGoForward.ShouldBeFalse();
+        tabs.History.Places.ShouldNotContain(new Place(customers, 1));
+    }
+
+    [Fact]
+    public void AWalkThroughReferringRecordsIsRememberedFromItsOrigin()
+    {
+        using var harness = Export();
+        using var session = Read(harness);
+        var tabs = new ReaderTabs(session);
+        var orders = Table(session, "Bestellungen");
+        var customers = Table(session, "Kunden");
+        var key = ResolvedForeignKey.Resolve(session.RelationshipsOf(customers).ReferencedBy.Single().ForeignKey, orders, customers).ShouldNotBeNull();
+
+        // K1 is referred to by N1 and N3; stepping between them is one walk, not two navigations.
+        tabs.Remember(customers, 1, session.FollowBack(customers, 1, key));
+
+        tabs.History.Places.ShouldBe([new Place(customers, 1), new Place(orders, 1)]);
+        tabs.History.Back().ShouldBe(new Place(customers, 1));
+    }
+
+    [Fact]
+    public void ARecordIsReachedByItsNumberWhereTheTableHoldsOne()
+    {
+        using var harness = Export();
+        using var session = Read(harness);
+        var tabs = new ReaderTabs(session);
+        var customers = Table(session, "Kunden");
+
+        var reached = tabs.Reach(customers, 2).ShouldNotBeNull();
+        reached.Kind.ShouldBe(NavigationKind.Positioned);
+        reached.Ordinal.ShouldBe(2);
+        reached.Position.ShouldBe(1);
+        ReaderTabs.Describe(reached, ReportLanguage.English).ShouldBe("Record 2.");
+
+        tabs.Reach(customers, 4).ShouldBeNull();
+        tabs.Reach(customers, 0).ShouldBeNull();
+    }
 }

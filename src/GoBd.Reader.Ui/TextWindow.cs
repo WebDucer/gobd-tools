@@ -59,6 +59,7 @@ internal sealed class TextWindow : Window, ILocalized
         Width = 820;
         Height = 680;
         Text = text;
+        ReaderWindows.OpenUsable(this);
 
         var lines = text.ReplaceLineEndings("\n").Split('\n');
         if (lines.Length <= LinesBeyondWhichItIsAList)
@@ -75,11 +76,13 @@ internal sealed class TextWindow : Window, ILocalized
             Scroller = new ScrollViewer
             {
                 Content = Body,
+                Focusable = true,
                 HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
                 VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
             };
 
-            Content = Scroller;
+            Content = new Zoomed(Scroller);
+            KeyDown += OnKeyDown;
             return;
         }
 
@@ -111,7 +114,7 @@ internal sealed class TextWindow : Window, ILocalized
             },
         });
 
-        Content = Lines;
+        Content = new Zoomed(Lines);
         KeyDown += OnKeyDown;
     }
 
@@ -150,6 +153,19 @@ internal sealed class TextWindow : Window, ILocalized
 
     private async void OnKeyDown(object? sender, KeyEventArgs args)
     {
+        // Escape closes it, as it closes the other windows beside the reader, and Cmd+W on macOS.
+        if (ReaderKeys.CloseDialog.Matches(args))
+        {
+            args.Handled = true;
+            Close();
+            return;
+        }
+
+        if (Lines is null)
+        {
+            return;
+        }
+
         var copy = OperatingSystem.IsMacOS() ? KeyModifiers.Meta : KeyModifiers.Control;
         if (args.Key != Key.C || args.KeyModifiers != copy || Clipboard is null)
         {

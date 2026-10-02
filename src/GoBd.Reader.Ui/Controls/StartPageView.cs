@@ -1,4 +1,5 @@
 using Avalonia;
+using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Layout;
 using Avalonia.Markup.Xaml.MarkupExtensions;
@@ -36,11 +37,12 @@ internal sealed class StartPageView : ScrollViewer
     private Action? redraw;
 
     private readonly TextBlock verdict = new() { FontSize = 22, FontWeight = FontWeight.SemiBold };
-    private readonly TextBlock progressText = new() { Opacity = 0.75, TextWrapping = TextWrapping.Wrap };
+    private readonly TextBlock progressText = new() { Classes = { ReaderTheme.MutedClass }, TextWrapping = TextWrapping.Wrap };
     private readonly ProgressBar progress = new() { Minimum = 0, Maximum = 1, Height = 6 };
     private readonly StackPanel tables = new() { Orientation = Orientation.Vertical };
     private readonly StackPanel findings = new() { Orientation = Orientation.Vertical, Spacing = 16 };
     private readonly StackPanel notices = new() { Orientation = Orientation.Vertical, Spacing = 4 };
+    private readonly ReadingAnnouncements announcements = new();
     private readonly TextBlock tablesHeading = Section();
     private readonly TextBlock findingsHeading = Section();
     private readonly TextBlock noticesHeading = Section();
@@ -48,6 +50,9 @@ internal sealed class StartPageView : ScrollViewer
     /// <summary>Creates the start page, empty until an export is read.</summary>
     public StartPageView()
     {
+        // Takes focus when its tab is brought to the front from the keyboard, so the summary can
+        // be scrolled with the keys rather than only with a wheel.
+        Focusable = true;
         Content = new StackPanel
         {
             Orientation = Orientation.Vertical,
@@ -70,10 +75,18 @@ internal sealed class StartPageView : ScrollViewer
         SetLanguage(language);
     }
 
+    /// <summary>Told what to announce to assistive technology, and whether it interrupts.</summary>
+    public Action<string, bool>? Announce { get; set; }
+
+    /// <summary>Starts announcing the reading of another export from its beginning.</summary>
+    public void BeginReading() => announcements.Reset();
+
     /// <summary>Updates the display language and refreshes all text.</summary>
     public void SetLanguage(ReportLanguage newLanguage)
     {
         language = newLanguage;
+        AutomationProperties.SetName(progress, UiText.ReadingProgressName(language));
+        AutomationProperties.SetName(this, UiText.SummaryTab(language));
         tablesHeading.Text = UiText.TablesHeading(language);
         findingsHeading.Text = UiText.FindingsHeading(language);
         noticesHeading.Text = UiText.NoticesHeading(language);
@@ -90,8 +103,8 @@ internal sealed class StartPageView : ScrollViewer
         if (reading.Complete)
         {
             var brushKey = reading.Verdict == GoBd.Validation.Findings.Verdict.Conformant
-                ? ReaderTheme.Success
-                : ReaderTheme.Danger;
+                ? ReaderTheme.Conformant
+                : ReaderTheme.Defective;
             verdict[!TextBlock.ForegroundProperty] = new DynamicResourceExtension(brushKey);
         }
         else
@@ -106,6 +119,12 @@ internal sealed class StartPageView : ScrollViewer
         ShowTables(reading);
         ShowFindings(reading);
         ShowNotices(reading);
+
+        // What changed enough to matter, not every tick: the display is told ten times a second.
+        foreach (var message in announcements.Next(reading, language))
+        {
+            Announce?.Invoke(message, false);
+        }
     }
 
     /// <summary>Says that nothing is open, which is what the reader starts with.</summary>
@@ -173,7 +192,6 @@ internal sealed class StartPageView : ScrollViewer
                 {
                     Text = notice.Text(language),
                     TextWrapping = TextWrapping.Wrap,
-                    Opacity = 0.9,
                 });
             }
 
@@ -276,7 +294,7 @@ internal sealed class StartPageView : ScrollViewer
                 Text = UiText.TruncatedNotice(language),
                 TextWrapping = TextWrapping.Wrap,
                 FontStyle = FontStyle.Italic,
-                Opacity = 0.75,
+                Classes = { ReaderTheme.MutedClass },
             });
         }
 
@@ -302,8 +320,8 @@ internal sealed class StartPageView : ScrollViewer
             Margin = new Thickness(0, 6, 0, 0),
             Child = content,
         };
-        border[!Border.BackgroundProperty] = new DynamicResourceExtension(ReaderTheme.BackgroundElevated);
-        border[!Border.BorderBrushProperty] = new DynamicResourceExtension(ReaderTheme.Border);
+        border[!Border.BackgroundProperty] = new DynamicResourceExtension(ReaderTheme.Surface);
+        border[!Border.BorderBrushProperty] = new DynamicResourceExtension(ReaderTheme.SurfaceBorder);
         return border;
     }
 
@@ -329,11 +347,16 @@ internal sealed class StartPageView : ScrollViewer
             Text = text,
             TextWrapping = code ? TextWrapping.NoWrap : TextWrapping.Wrap,
             FontWeight = header ? FontWeight.SemiBold : FontWeight.Normal,
-            Opacity = header || code ? 0.8 : 1,
             FontFamily = code ? CodeFont : FontFamily.Default,
             HorizontalAlignment = right ? HorizontalAlignment.Right : HorizontalAlignment.Left,
             Margin = new Thickness(0, 3, column == 0 ? 24 : 20, 3),
         };
+
+        // Headers and codes say less than the text beside them, but must still be read.
+        if (header || code)
+        {
+            block.Classes.Add(ReaderTheme.MutedClass);
+        }
 
         Grid.SetRow(block, row);
         Grid.SetColumn(block, column);
@@ -346,11 +369,10 @@ internal sealed class StartPageView : ScrollViewer
         var rule = new Border
         {
             Height = 1,
-            Opacity = 0.35,
             VerticalAlignment = VerticalAlignment.Bottom,
             Margin = new Thickness(0, 0, 0, -1),
         };
-        rule[!Border.BackgroundProperty] = new DynamicResourceExtension(ReaderTheme.Border);
+        rule[!Border.BackgroundProperty] = new DynamicResourceExtension(ReaderTheme.SurfaceBorder);
 
         Grid.SetRow(rule, row);
         Grid.SetColumn(rule, 0);

@@ -13,6 +13,8 @@ Two tools for GoBD/GDPdU data carrier exports, as described by the
   with a click.
 
 Every finding code either tool reports is explained in [`docs/finding-codes.md`](docs/finding-codes.md).
+What the reader does for people who work with a keyboard, a screen reader, high contrast or a
+larger size is described in [`docs/accessibility.md`](docs/accessibility.md).
 
 ## gobd-validate
 
@@ -170,9 +172,11 @@ gh attestation verify gobd-reader-win-x64.exe -R WebDucer/gobd-tools \
 - **Read the summary** on the first tab. It shows the verdict, each table with its record count
   or its findings, and the findings grouped by table — under the same codes and messages
   `gobd-validate --contents` reports for the same export. It cannot be closed.
-- **Navigate** by medium and table. Beneath each table the navigator lists the tables it
-  references and the tables that reference it, with the columns forming each key. Those entries
-  are information: choosing one opens nothing.
+- **Navigate** by medium and table. Click a table, or move to it with the arrow keys and press
+  Enter, to open it; moving through the navigator opens nothing by itself. Beneath each table the
+  navigator lists the tables it references and the tables that reference it, with the columns
+  forming each key. Those entries are information: choosing one opens nothing. The navigator can be
+  made wider, or collapsed with **View → Show Navigator**.
 - **Read** a consistent table as a grid in its own tab: its declared columns, declared value
   redefinitions, and two numbers on every row — `#`, where the record sits in what you are
   looking at, and **Record**, the number the file gives it, which is the number a finding cites.
@@ -196,11 +200,17 @@ gh attestation verify gobd-reader-win-x64.exe -R WebDucer/gobd-tools \
 - **See what is wrong** with a table whose records do not match their declaration. Its findings
   are shown instead of its data, and only that table is withheld. A reference that resolves to
   nothing is a finding, not a reason to withhold: such a table still shows its records.
-- **Follow** a foreign key by clicking its cell. Values that take part in one are coloured and
-  underlined, with the table they lead to in their tooltip; a value matching no record there is
-  struck through wherever it appears, however many of them there are. Right-click a record to
-  step through the records that refer to it — Previous and Next appear only for that walk, in
-  that table's tab, and go when it ends.
+- **Follow** a foreign key by clicking its cell, or press Enter on a record — or right-click it —
+  for its actions: each key it can follow, with the table it leads to, each table whose records
+  refer to it, and copying it. Values that take part in a key are coloured and underlined; a value
+  matching no record there is struck through wherever it appears, however many of them there are.
+  Stepping through the records that refer to one shows Previous and Next only for that walk, in
+  that table's tab. **Go → Back** and **Forward** retrace navigations, and **Go → Go to Record…**
+  reaches a record by the number the file gives it.
+- **Work from the keyboard.** Every command stands in a menu with its shortcut, and
+  **Help → Keyboard Shortcuts** (F1) lists them all. **View** zooms the whole reader up to 200 %,
+  and **Settings** offers high contrast as well as light and dark. See
+  [`docs/accessibility.md`](docs/accessibility.md).
 
 Nothing is ever written to the export. A filter or a sort makes a view inside the reader's own
 store, and every value shown is the value the file holds — the reader interprets values in order

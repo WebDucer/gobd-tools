@@ -76,6 +76,16 @@ public sealed class ExportHarness : IDisposable
         return new ExportHarness(root, exportPath, new StoreOptions(stores));
     }
 
+    /// <summary>Opens the export without reading it, so that every table is still waiting to be read.</summary>
+    public ReaderSession Open()
+    {
+        var opened = ReaderSession.Open(ExportPath, Options).Session
+            ?? throw new InvalidOperationException("The export could not be opened.");
+
+        session = opened;
+        return opened;
+    }
+
     /// <summary>Opens the export and reads it to the end, as the window's worker would.</summary>
     public ReaderSession Read()
     {

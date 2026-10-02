@@ -33,10 +33,10 @@ public sealed class SettingsWindowTests : HeadlessTest
             var settings = window.OwnedWindows.OfType<SettingsWindow>().Single();
 
             var pickers = settings.GetLogicalDescendants().OfType<ComboBox>().ToArray();
-            pickers.Length.ShouldBe(2);
+            pickers.Length.ShouldBe(3);
 
             var themePicker = pickers[0];
-            var langPicker = pickers[1];
+            var langPicker = pickers[2];
 
             // Change Theme to Dark
             themePicker.SelectedIndex = (int)ThemePreference.Dark;
@@ -58,6 +58,29 @@ public sealed class SettingsWindowTests : HeadlessTest
             var closeButton = settings.GetLogicalDescendants().OfType<Button>().Last();
             Driver.Click(closeButton);
             settings.IsVisible.ShouldBeFalse();
+        }));
+    });
+
+    [Theory]
+    [InlineData(ThemePreference.HighContrastDark, "Aquatic", "High contrast (dark)")]
+    [InlineData(ThemePreference.HighContrastLight, "Desert", "High contrast (light)")]
+    public Task HighContrastCanBeChosenAndIsKept(ThemePreference choice, string variant, string offered) => Ui(() =>
+    {
+        using var preferences = new TemporaryPreferences();
+        RestoringApplication(() => WithWindow(new MainWindow(null, null, preferences.Store), window =>
+        {
+            window.ShowSettings();
+            var settings = window.OwnedWindows.OfType<SettingsWindow>().Single();
+            var themePicker = settings.GetLogicalDescendants().OfType<ComboBox>().First();
+
+            themePicker.Items.OfType<ComboBoxItem>().Select(item => item.Content as string).ShouldBe(
+                ["System default", "Light", "Dark", "High contrast (dark)", "High contrast (light)"]);
+
+            themePicker.SelectedItem = themePicker.Items.OfType<ComboBoxItem>().Single(item => (string?)item.Content == offered);
+
+            Avalonia.Application.Current!.RequestedThemeVariant.ShouldNotBeNull().Key.ShouldBe(variant);
+            preferences.Store.Load().Theme.ShouldBe(choice);
+            settings.Close();
         }));
     });
 
@@ -102,7 +125,7 @@ public sealed class SettingsWindowTests : HeadlessTest
             window.ShowSettings();
             var settings = window.OwnedWindows.OfType<SettingsWindow>().Single();
 
-            var langPicker = settings.GetLogicalDescendants().OfType<ComboBox>().ToArray()[1];
+            var langPicker = settings.GetLogicalDescendants().OfType<ComboBox>().ToArray()[2];
             langPicker.SelectedIndex = 1; // German
 
             // Calling ShowSettings again must not spawn a duplicate window
