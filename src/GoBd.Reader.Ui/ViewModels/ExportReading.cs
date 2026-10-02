@@ -1,5 +1,6 @@
 using GoBd.Validation.Findings;
 using GoBd.Validation.Model;
+using GoBd.Validation.Localisation;
 
 namespace GoBd.Reader.Ui.ViewModels;
 
@@ -59,8 +60,27 @@ public sealed record TableReading(
 /// </remarks>
 /// <param name="Table">The table it concerns.</param>
 /// <param name="Column">The column it concerns, by its declared name.</param>
-/// <param name="Text">What the reader cannot do with it, and what it does instead.</param>
-public sealed record ReaderNotice(TableNode Table, string Column, string Text);
+/// <param name="Limit">What the reader cannot do with it.</param>
+/// <param name="Count">How many of its values that concerns, where it concerns some of them.</param>
+public sealed record ReaderNotice(TableNode Table, string Column, ReaderLimit Limit, long Count = 0)
+{
+    /// <summary>What the reader cannot do with the column, and what it does instead, in a language.</summary>
+    public string Text(ReportLanguage language) => Limit switch
+    {
+        ReaderLimit.NumberTooLarge => UiText.NumberTooLarge(language, Column),
+        _ => UiText.ValuesNotTimes(language, Column, Count),
+    };
+}
+
+/// <summary>What the reader cannot do with a column whose declaration it otherwise reads.</summary>
+public enum ReaderLimit
+{
+    /// <summary>Its numbers have more digits than the reader computes with exactly.</summary>
+    NumberTooLarge,
+
+    /// <summary>It declares a time, and some of its values cannot be read as one.</summary>
+    ValuesNotTimes,
+}
 
 /// <summary>
 /// The export as reading it has left it: the verdict so far, every table's state, and what was

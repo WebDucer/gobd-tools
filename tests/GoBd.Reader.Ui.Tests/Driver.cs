@@ -62,7 +62,7 @@ internal static class Driver
         ArgumentNullException.ThrowIfNull(view);
 
         var panel = view.GetLogicalDescendants()
-            .OfType<StackPanel>()
+            .OfType<Panel>()
             .First(candidate => candidate.Children.OfType<TextBlock>().Any(label => label.Text == row));
 
         var adder = panel.Children.OfType<Button>().Last();

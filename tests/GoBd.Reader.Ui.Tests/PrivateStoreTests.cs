@@ -1,5 +1,6 @@
 using System.Runtime.Versioning;
 using GoBd.Reader.Data;
+using GoBd.Validation.Localisation;
 
 namespace GoBd.Reader.Ui.Tests;
 
@@ -43,7 +44,7 @@ public sealed class PrivateStoreTests : HeadlessTest
                 var texts = Driver.Texts(window);
 
                 texts.ShouldContain("This export could not be opened");
-                texts.ShouldContain(MainWindow.Describe(new LocationNotPrivate(open, StorePrivacyProblem.ReadableByOthers)));
+                texts.ShouldContain(MainWindow.Describe(new LocationNotPrivate(open, StorePrivacyProblem.ReadableByOthers), ReportLanguage.English));
                 texts.ShouldContain(text => text.Contains("other accounts can read", StringComparison.Ordinal)
                     && text.Contains("TMPDIR", StringComparison.Ordinal));
                 window.Session.ShouldBeNull();

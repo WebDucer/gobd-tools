@@ -4,6 +4,7 @@ using Avalonia.Controls;
 using Avalonia.LogicalTree;
 using Avalonia.Threading;
 using GoBd.Validation;
+using GoBd.Validation.Localisation;
 
 namespace GoBd.Reader.Ui.Tests;
 
@@ -16,6 +17,12 @@ namespace GoBd.Reader.Ui.Tests;
 /// </remarks>
 public sealed class HelpMenuTests : HeadlessTest
 {
+    // What the entries and their windows are called in English, which the tests read the reader in.
+    private const string Licence = "Licence";
+    private const string Notice = "Notice";
+    private const string Notices = "Third-party notices";
+    private const string About = "About GoBD Reader";
+
     private const string Tables = """
                 <Table>
                   <URL>t.csv</URL>
@@ -51,19 +58,6 @@ public sealed class HelpMenuTests : HeadlessTest
     /// <summary>The same, for an entry that shows a text.</summary>
     private static TextWindow ChooseText(MainWindow window, string entry) =>
         Choose(window, entry).ShouldBeOfType<TextWindow>();
-
-    private static void WithWindow(MainWindow window, Action<MainWindow> body)
-    {
-        window.Show();
-        try
-        {
-            body(window);
-        }
-        finally
-        {
-            window.Close();
-        }
-    }
 
     [Fact]
     public Task AShortTextIsOneBlockThatCanBeSelected() => Ui(() =>
@@ -147,8 +141,8 @@ public sealed class HelpMenuTests : HeadlessTest
 
         var offered = Items(Help(window)).Select(item => (string?)item.Header).ToArray();
         offered.ShouldBe(OperatingSystem.IsMacOS()
-            ? [MainWindow.LicenceTitle, MainWindow.NoticeTitle, MainWindow.NoticesTitle]
-            : [MainWindow.LicenceTitle, MainWindow.NoticeTitle, MainWindow.NoticesTitle, MainWindow.AboutTitle]);
+            ? [Licence, Notice, Notices]
+            : [Licence, Notice, Notices, About]);
     }));
 
     [Fact]
@@ -160,13 +154,13 @@ public sealed class HelpMenuTests : HeadlessTest
         if (OperatingSystem.IsMacOS())
         {
             Items(application.ShouldNotBeNull()).Select(item => (string?)item.Header)
-                .ShouldContain(MainWindow.AboutTitle);
+                .ShouldContain(About);
         }
         else
         {
-            (application is null || Items(application).All(item => (string?)item.Header != MainWindow.AboutTitle))
+            (application is null || Items(application).All(item => (string?)item.Header != About))
                 .ShouldBeTrue("only macOS has an application menu");
-            Items(Help(window)).Select(item => (string?)item.Header).ShouldContain(MainWindow.AboutTitle);
+            Items(Help(window)).Select(item => (string?)item.Header).ShouldContain(About);
         }
     }));
 
@@ -174,7 +168,7 @@ public sealed class HelpMenuTests : HeadlessTest
     public Task TheLicenceIsShownOnItsOwn() => Ui(() => WithWindow(new MainWindow(null), window =>
     {
         // The licence and what it does not cover are apart, as LICENSE and NOTICE are apart.
-        var licence = ChooseText(window, MainWindow.LicenceTitle);
+        var licence = ChooseText(window, Licence);
 
         licence.Text.ShouldBe(LicenceTexts.Licence);
         licence.Text.ShouldNotContain("Audicon");
@@ -182,16 +176,16 @@ public sealed class HelpMenuTests : HeadlessTest
 
     [Fact]
     public Task WhatTheLicenceDoesNotCoverIsShown() => Ui(() => WithWindow(new MainWindow(null), window =>
-        ChooseText(window, MainWindow.NoticeTitle).Text.ShouldBe(LicenceTexts.Notice)));
+        ChooseText(window, Notice).Text.ShouldBe(LicenceTexts.Notice)));
 
     [Fact]
     public Task TheNoticesAreShown() => Ui(() => WithWindow(new MainWindow(null), window =>
-        ChooseText(window, MainWindow.NoticesTitle).Text.ShouldBe(LicenceTexts.ThirdPartyNotices)));
+        ChooseText(window, Notices).Text.ShouldBe(LicenceTexts.ThirdPartyNotices)));
 
     [Fact]
     public Task AboutShowsTheReaderRatherThanAParagraph() => Ui(() => WithWindow(new MainWindow(null), window =>
     {
-        var about = Choose(window, MainWindow.AboutTitle).ShouldBeOfType<AboutWindow>();
+        var about = Choose(window, About).ShouldBeOfType<AboutWindow>();
         about.UpdateLayout();
         var texts = Driver.Texts(about);
 
@@ -205,12 +199,12 @@ public sealed class HelpMenuTests : HeadlessTest
     }));
 
     [Theory]
-    [InlineData(MainWindow.LicenceTitle)]
-    [InlineData(MainWindow.NoticeTitle)]
-    [InlineData(MainWindow.NoticesTitle)]
+    [InlineData(Licence)]
+    [InlineData(Notice)]
+    [InlineData(Notices)]
     public Task AboutOpensEachTextItOffers(string entry) => Ui(() => WithWindow(new MainWindow(null), window =>
     {
-        var about = Choose(window, MainWindow.AboutTitle).ShouldBeOfType<AboutWindow>();
+        var about = Choose(window, About).ShouldBeOfType<AboutWindow>();
 
         var button = about.GetLogicalDescendants().OfType<Button>().Single(candidate => (string?)candidate.Content == entry);
         Driver.Click(button);
@@ -221,20 +215,20 @@ public sealed class HelpMenuTests : HeadlessTest
     [Fact]
     public Task ChoosingAnEntryAgainBringsItsWindowForward() => Ui(() => WithWindow(new MainWindow(null), window =>
     {
-        var first = ChooseText(window, MainWindow.NoticesTitle);
-        var second = ChooseText(window, MainWindow.NoticesTitle);
+        var first = ChooseText(window, Notices);
+        var second = ChooseText(window, Notices);
 
         second.ShouldBeSameAs(first);
-        window.OwnedWindows.OfType<TextWindow>().Count(owned => owned.Title == MainWindow.NoticesTitle).ShouldBe(1);
+        window.OwnedWindows.OfType<TextWindow>().Count(owned => owned.Title == Notices).ShouldBe(1);
     }));
 
     [Fact]
     public Task AClosedWindowIsOpenedAfresh() => Ui(() => WithWindow(new MainWindow(null), window =>
     {
-        var first = ChooseText(window, MainWindow.LicenceTitle);
+        var first = ChooseText(window, Licence);
         first.Close();
 
-        ChooseText(window, MainWindow.LicenceTitle).ShouldNotBeSameAs(first);
+        ChooseText(window, Licence).ShouldNotBeSameAs(first);
     }));
 
     [Fact]
@@ -245,7 +239,7 @@ public sealed class HelpMenuTests : HeadlessTest
         {
             var reading = window.Reading;
 
-            ChooseText(window, MainWindow.NoticesTitle).Text.ShouldBe(LicenceTexts.ThirdPartyNotices);
+            ChooseText(window, Notices).Text.ShouldBe(LicenceTexts.ThirdPartyNotices);
 
             // The reading reports to this thread, so the dispatcher is kept running while it is
             // waited for, as the window's own loop would.
@@ -260,4 +254,18 @@ public sealed class HelpMenuTests : HeadlessTest
             window.Session.ShouldNotBeNull();
         });
     });
+
+    [Fact]
+    public Task TheWindowsBesideAndTheMenusFollowTheLanguage() => Ui(() => RestoringApplication(() => WithWindow(new MainWindow(null), window =>
+    {
+        var licence = ChooseText(window, Licence);
+        var about = Choose(window, About).ShouldBeOfType<AboutWindow>();
+
+        window.ApplyLanguage(ReportLanguage.German);
+
+        licence.Title.ShouldBe("Lizenz");
+        about.Title.ShouldBe("Über GoBD Reader");
+        about.GetLogicalDescendants().OfType<HyperlinkButton>().Single().Content.ShouldBe("Projektseite");
+        Items(NativeMenu.GetMenu(window).ShouldNotBeNull()).Select(item => item.Header).ShouldContain("Hilfe");
+    })));
 }

@@ -7,6 +7,7 @@ using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform;
 using GoBd.Validation;
+using GoBd.Validation.Localisation;
 
 namespace GoBd.Reader.Ui;
 
@@ -21,8 +22,33 @@ namespace GoBd.Reader.Ui;
 /// The copyright line comes from the licence the build carries, so it cannot drift from it. See
 /// the prepare-public-release change's design.md D5.
 /// </remarks>
-internal sealed class AboutWindow : Window
+internal sealed class AboutWindow : Window, ILocalized
 {
+    private readonly Button close = new() { HorizontalAlignment = HorizontalAlignment.Right };
+    private readonly TextBlock what = new()
+    {
+        TextWrapping = TextWrapping.Wrap,
+        TextAlignment = TextAlignment.Center,
+        Opacity = 0.85,
+    };
+
+    private readonly TextBlock terms = new()
+    {
+        TextWrapping = TextWrapping.Wrap,
+        TextAlignment = TextAlignment.Center,
+        Opacity = 0.7,
+    };
+
+    private readonly HyperlinkButton project = new()
+    {
+        NavigateUri = new Uri(ProjectUrl),
+        HorizontalAlignment = HorizontalAlignment.Center,
+    };
+
+    private readonly Button licence = new();
+    private readonly Button notice = new();
+    private readonly Button notices = new();
+
     /// <summary>Where the reader comes from, for the person who wants to see for themselves.</summary>
     internal const string ProjectUrl = "https://github.com/WebDucer/gobd-tools";
 
@@ -31,13 +57,12 @@ internal sealed class AboutWindow : Window
         "Version " + typeof(AboutWindow).Assembly.GetName().Version?.ToString();
 
     /// <summary>Creates the window, with the entries that open the three texts.</summary>
-    public AboutWindow(Action showLicence, Action showNotice, Action showNotices)
+    public AboutWindow(Action showLicence, Action showNotice, Action showNotices, ReportLanguage language)
     {
         ArgumentNullException.ThrowIfNull(showLicence);
         ArgumentNullException.ThrowIfNull(showNotice);
         ArgumentNullException.ThrowIfNull(showNotices);
 
-        Title = MainWindow.AboutTitle;
         Icon = ReaderIcon.ForWindow();
         Width = 460;
         SizeToContent = SizeToContent.Height;
@@ -67,37 +92,8 @@ internal sealed class AboutWindow : Window
             HorizontalAlignment = HorizontalAlignment.Center,
         };
 
-        var what = new TextBlock
-        {
-            Text = "Reads GoBD/GDPdU data carrier exports, as described by Beschreibungsstandard 1.6.",
-            TextWrapping = TextWrapping.Wrap,
-            TextAlignment = TextAlignment.Center,
-            Opacity = 0.85,
-        };
-
-        var terms = new TextBlock
-        {
-            // The licence writes its copyright "(c)", which a window can set properly.
-            Text = "MIT licence · " + LicenceTexts.Copyright.Replace("(c)", "©", StringComparison.Ordinal),
-            TextWrapping = TextWrapping.Wrap,
-            TextAlignment = TextAlignment.Center,
-            Opacity = 0.7,
-        };
-
-        var project = new HyperlinkButton
-        {
-            Content = "Project page",
-            NavigateUri = new Uri(ProjectUrl),
-            HorizontalAlignment = HorizontalAlignment.Center,
-        };
-
-        var licence = new Button { Content = MainWindow.LicenceTitle };
         licence.Click += (_, _) => showLicence();
-
-        var notice = new Button { Content = MainWindow.NoticeTitle };
         notice.Click += (_, _) => showNotice();
-
-        var notices = new Button { Content = MainWindow.NoticesTitle };
         notices.Click += (_, _) => showNotices();
 
         var texts = new StackPanel
@@ -108,7 +104,6 @@ internal sealed class AboutWindow : Window
             Children = { licence, notice, notices },
         };
 
-        var close = new Button { Content = "Close", HorizontalAlignment = HorizontalAlignment.Right };
         close.Click += (_, _) => Close();
 
         Content = new StackPanel
@@ -127,5 +122,22 @@ internal sealed class AboutWindow : Window
                 Close();
             }
         };
+
+        SetLanguage(language);
+    }
+
+    /// <inheritdoc />
+    public void SetLanguage(ReportLanguage language)
+    {
+        Title = UiText.About(language);
+        what.Text = UiText.AboutDescription(language);
+
+        // The licence writes its copyright "(c)", which a window can set properly.
+        terms.Text = UiText.MitLicence(language) + " · " + LicenceTexts.Copyright.Replace("(c)", "©", StringComparison.Ordinal);
+        project.Content = UiText.ProjectPage(language);
+        licence.Content = UiText.Licence(language);
+        notice.Content = UiText.Notice(language);
+        notices.Content = UiText.ThirdPartyNotices(language);
+        close.Content = UiText.Close(language);
     }
 }

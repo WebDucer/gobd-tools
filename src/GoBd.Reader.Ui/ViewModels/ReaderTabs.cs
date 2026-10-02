@@ -1,5 +1,5 @@
-using System.Globalization;
 using GoBd.Reader.Data;
+using GoBd.Validation.Localisation;
 using GoBd.Validation.Model;
 
 namespace GoBd.Reader.Ui.ViewModels;
@@ -54,8 +54,16 @@ public sealed class TableTab(TableNode table)
     /// <summary>The record in view, as an index into the table's rows, or -1 for none.</summary>
     public int Position { get; set; } = -1;
 
-    /// <summary>What was last said about a navigation concerning this table.</summary>
-    public string Status { get; set; } = string.Empty;
+    /// <summary>The navigation concerning this table that was made last, or none.</summary>
+    public Navigation? Navigated { get; set; }
+
+    /// <summary>What is said about that navigation, in a language.</summary>
+    /// <remarks>
+    /// Said when asked rather than when it happened, so the status line follows a change of
+    /// language like everything else on the tab.
+    /// </remarks>
+    public string Status(ReportLanguage language) =>
+        Navigated is { } navigation ? ReaderTabs.Describe(navigation, language) : string.Empty;
 
     /// <summary>The backwards walk being stepped through here, or none.</summary>
     public Walk? Walk { get; set; }
@@ -132,6 +140,9 @@ public sealed class ReaderTabs(ReaderSession session)
 
     /// <summary>The tab in front, or null when that is the start page.</summary>
     public TableTab? Active { get; private set; }
+
+    /// <summary>The language a notice is said in when it is said.</summary>
+    public ReportLanguage Language { get; set; }
 
     /// <summary>True when the start page is the tab in front.</summary>
     public bool StartPageActive => Active is null;
@@ -235,7 +246,7 @@ public sealed class ReaderTabs(ReaderSession session)
         }
 
         var tab = Open(table);
-        tab.Status = Describe(navigation);
+        tab.Navigated = navigation;
 
         // A forward navigation clears any walk the tab was holding: it shows no stepping
         // controls at all, which is the bug this replaces — one bar served both jobs and forward
@@ -293,9 +304,7 @@ public sealed class ReaderTabs(ReaderSession session)
                 tab.Query = lifted;
                 tab.View = rebuilt.View;
                 tab.Rows = rebuilt.Records;
-                tab.Notice = string.Create(
-                    CultureInfo.InvariantCulture,
-                    $"Filter removed to show record {navigation.Ordinal}.");
+                tab.Notice = UiText.FilterRemoved(Language, navigation.Ordinal);
 
                 position = rebuilt.Records.IndexOfOrdinal(navigation.Ordinal);
             }
@@ -326,34 +335,20 @@ public sealed class ReaderTabs(ReaderSession session)
     }
 
     /// <summary>What a navigation is reported as, in the tab of the table it concerns.</summary>
-    public static string Describe(Navigation navigation)
+    public static string Describe(Navigation navigation, ReportLanguage language)
     {
         ArgumentNullException.ThrowIfNull(navigation);
 
+        var table = navigation.Table?.Identity ?? string.Empty;
         return navigation.Kind switch
         {
-            NavigationKind.Positioned when navigation.Matches > 1 => string.Create(
-                CultureInfo.InvariantCulture,
-                $"Record {navigation.MatchIndex + 1} of {navigation.Matches} referring to '{navigation.Value}'."),
-
-            NavigationKind.Positioned => string.Create(
-                CultureInfo.InvariantCulture,
-                $"Record {navigation.Ordinal} for '{navigation.Value}'."),
-
-            NavigationKind.Unresolved =>
-                $"'{navigation.Value}' matches no record of '{navigation.Table?.Identity}'. "
-                + "The reference does not resolve.",
-
-            NavigationKind.Unreadable =>
-                $"'{navigation.Table?.Identity}' does not conform to its declaration, so it has no "
-                + "data to show. There is nowhere to follow this reference to.",
-
-            NavigationKind.NotReady =>
-                $"'{navigation.Table?.Identity}' is still being read. It will show its data as soon "
-                + "as it has been.",
-
-            NavigationKind.NoReference => "This record refers to nothing here.",
-
+            NavigationKind.Positioned when navigation.Matches > 1 =>
+                UiText.RecordOfReferring(language, navigation.MatchIndex + 1, navigation.Matches, navigation.Value),
+            NavigationKind.Positioned => UiText.RecordFor(language, navigation.Ordinal, navigation.Value),
+            NavigationKind.Unresolved => UiText.ReferenceUnresolved(language, navigation.Value, table),
+            NavigationKind.Unreadable => UiText.ReferenceUnreadable(language, table),
+            NavigationKind.NotReady => UiText.ReferenceNotReady(language, table),
+            NavigationKind.NoReference => UiText.NoReference(language),
             _ => string.Empty,
         };
     }

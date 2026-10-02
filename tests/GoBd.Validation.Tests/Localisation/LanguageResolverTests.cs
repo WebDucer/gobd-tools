@@ -99,6 +99,32 @@ public sealed class LanguageResolverTests
         Should.NotThrow(() => LanguageResolver.Resolve(null));
 
     [Fact]
+    public void WithoutPosixVariablesMacOsSaysWhichLanguageThePersonPrefers()
+    {
+        Assert.SkipUnless(OperatingSystem.IsMacOS(), "Only macOS starts applications without the POSIX variables.");
+
+        string[] names = ["LC_ALL", "LC_MESSAGES", "LANG"];
+        var originals = names.ToDictionary(name => name, Environment.GetEnvironmentVariable);
+        try
+        {
+            foreach (var name in names)
+            {
+                Environment.SetEnvironmentVariable(name, null);
+            }
+
+            // Whatever the machine prefers, it is a language tag rather than nothing.
+            new SystemLanguageEnvironment().GetOperatingSystemLanguage().ShouldNotBeNullOrWhiteSpace();
+        }
+        finally
+        {
+            foreach (var (name, value) in originals)
+            {
+                Environment.SetEnvironmentVariable(name, value);
+            }
+        }
+    }
+
+    [Fact]
     public void SystemEnvironmentReadsThePosixLocaleVariables()
     {
         var environment = new SystemLanguageEnvironment();

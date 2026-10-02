@@ -1,7 +1,7 @@
-using System.Globalization;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Layout;
+using Avalonia.Markup.Xaml.MarkupExtensions;
 using Avalonia.Media;
 using GoBd.Reader.Ui.ViewModels;
 using GoBd.Validation.Findings;
@@ -24,15 +24,16 @@ namespace GoBd.Reader.Ui.Controls;
 /// </remarks>
 internal sealed class StartPageView : ScrollViewer
 {
-    private static readonly IBrush ConformantBrush = new SolidColorBrush(Color.FromRgb(0x26, 0x82, 0x3B));
-    private static readonly IBrush NonConformantBrush = new SolidColorBrush(Color.FromRgb(0xA5, 0x1D, 0x2D));
-
-    /// <summary>Grey rather than a theme colour, so a rule is faint on a light theme and on a dark one.</summary>
-    private static readonly IBrush RuleBrush = Brushes.Gray;
+    protected override Type StyleKeyOverride => typeof(ScrollViewer);
 
     /// <summary>A fallback stack, because a finding code is read as a code on whichever platform.</summary>
     internal static readonly FontFamily CodeFont =
         FontFamily.Parse("Menlo, Consolas, DejaVu Sans Mono, monospace");
+
+    private ReportLanguage language = ReportLanguage.English;
+
+    /// <summary>Shows again whatever is shown, so a change of language reaches all of it.</summary>
+    private Action? redraw;
 
     private readonly TextBlock verdict = new() { FontSize = 22, FontWeight = FontWeight.SemiBold };
     private readonly TextBlock progressText = new() { Opacity = 0.75, TextWrapping = TextWrapping.Wrap };
@@ -40,19 +41,9 @@ internal sealed class StartPageView : ScrollViewer
     private readonly StackPanel tables = new() { Orientation = Orientation.Vertical };
     private readonly StackPanel findings = new() { Orientation = Orientation.Vertical, Spacing = 16 };
     private readonly StackPanel notices = new() { Orientation = Orientation.Vertical, Spacing = 4 };
-    private readonly TextBlock tablesHeading = Section("Tables");
-    private readonly TextBlock findingsHeading = Section("Findings");
-
-    /// <summary>
-    /// The reader's own limits, headed as its own rather than the export's.
-    /// </summary>
-    /// <remarks>
-    /// Under the findings and named for what it is. What stands here is within the standard and
-    /// carries no finding code — the validator reports none of it — so a person comparing the two
-    /// tools must not have to work out which of these is a defect and which is this reader
-    /// admitting what it cannot do.
-    /// </remarks>
-    private readonly TextBlock noticesHeading = Section("What this reader cannot do with it");
+    private readonly TextBlock tablesHeading = Section();
+    private readonly TextBlock findingsHeading = Section();
+    private readonly TextBlock noticesHeading = Section();
 
     /// <summary>Creates the start page, empty until an export is read.</summary>
     public StartPageView()
@@ -75,23 +66,42 @@ internal sealed class StartPageView : ScrollViewer
                 notices,
             },
         };
+
+        SetLanguage(language);
+    }
+
+    /// <summary>Updates the display language and refreshes all text.</summary>
+    public void SetLanguage(ReportLanguage newLanguage)
+    {
+        language = newLanguage;
+        tablesHeading.Text = UiText.TablesHeading(language);
+        findingsHeading.Text = UiText.FindingsHeading(language);
+        noticesHeading.Text = UiText.NoticesHeading(language);
+        redraw?.Invoke();
     }
 
     /// <summary>Presents the export as reading it has left it.</summary>
     public void Show(ExportReading reading, string? exportPath)
     {
         ArgumentNullException.ThrowIfNull(reading);
+        redraw = () => Show(reading, exportPath);
 
-        verdict.Text = Verdict(reading, exportPath);
-        verdict.Foreground = reading.Complete
-            ? reading.Verdict == GoBd.Validation.Findings.Verdict.Conformant
-                ? ConformantBrush
-                : NonConformantBrush
-            : null;
+        verdict.Text = Verdict(reading, exportPath, language);
+        if (reading.Complete)
+        {
+            var brushKey = reading.Verdict == GoBd.Validation.Findings.Verdict.Conformant
+                ? ReaderTheme.Success
+                : ReaderTheme.Danger;
+            verdict[!TextBlock.ForegroundProperty] = new DynamicResourceExtension(brushKey);
+        }
+        else
+        {
+            verdict.ClearValue(TextBlock.ForegroundProperty);
+        }
 
         progress.Value = reading.Fraction;
         progress.IsVisible = !reading.Complete;
-        progressText.Text = Progress(reading);
+        progressText.Text = Progress(reading, language);
 
         ShowTables(reading);
         ShowFindings(reading);
@@ -99,15 +109,24 @@ internal sealed class StartPageView : ScrollViewer
     }
 
     /// <summary>Says that nothing is open, which is what the reader starts with.</summary>
-    public void ShowNothingOpened(string message) => Nothing("No export opened", message);
+    public void ShowNothingOpened()
+    {
+        redraw = ShowNothingOpened;
+        Nothing(UiText.NoExportOpened(language), UiText.OpenPrompt(language));
+    }
 
-    /// <summary>Says why what was chosen could not be opened.</summary>
-    public void ShowRefusal(string reason) => Nothing("This export could not be opened", reason);
+    /// <summary>Says why what was chosen could not be opened, in whichever language is chosen.</summary>
+    public void ShowRefusal(Func<ReportLanguage, string> reason)
+    {
+        ArgumentNullException.ThrowIfNull(reason);
+        redraw = () => ShowRefusal(reason);
+        Nothing(UiText.RefusalTitle(language), reason(language));
+    }
 
     private void Nothing(string heading, string message)
     {
         verdict.Text = heading;
-        verdict.Foreground = null;
+        verdict.ClearValue(TextBlock.ForegroundProperty);
         progressText.Text = message;
         progress.IsVisible = false;
         tables.Children.Clear();
@@ -152,13 +171,13 @@ internal sealed class StartPageView : ScrollViewer
             {
                 panel.Children.Add(new TextBlock
                 {
-                    Text = notice.Text,
+                    Text = notice.Text(language),
                     TextWrapping = TextWrapping.Wrap,
                     Opacity = 0.9,
                 });
             }
 
-            notices.Children.Add(panel);
+            notices.Children.Add(Card(panel));
         }
     }
 
@@ -182,10 +201,10 @@ internal sealed class StartPageView : ScrollViewer
         };
 
         Row(grid, 0);
-        Cell(grid, 0, 0, "Table", header: true);
-        Cell(grid, 0, 1, "State", header: true);
-        Cell(grid, 0, 2, "Records", header: true, right: true);
-        Cell(grid, 0, 3, "Findings", header: true, right: true);
+        Cell(grid, 0, 0, UiText.ColTable(language), header: true);
+        Cell(grid, 0, 1, UiText.ColState(language), header: true);
+        Cell(grid, 0, 2, UiText.ColRecords(language), header: true, right: true);
+        Cell(grid, 0, 3, UiText.ColFindings(language), header: true, right: true);
         Rule(grid, 0);
 
         var row = 1;
@@ -193,15 +212,15 @@ internal sealed class StartPageView : ScrollViewer
         {
             Row(grid, row);
             Cell(grid, row, 0, table.Table.Identity);
-            Cell(grid, row, 1, State(table));
-            Cell(grid, row, 2, Records(table), right: true);
+            Cell(grid, row, 1, State(table, language));
+            Cell(grid, row, 2, Records(table, language), right: true);
             Cell(grid, row, 3, table.Findings.Count == 0
                 ? "—"
-                : table.Findings.Count.ToString(CultureInfo.InvariantCulture), right: true);
+                : UiText.Count(language, table.Findings.Count), right: true);
             row++;
         }
 
-        tables.Children.Add(grid);
+        tables.Children.Add(Card(grid));
     }
 
     /// <summary>What was found, grouped by the table it concerns.</summary>
@@ -217,7 +236,7 @@ internal sealed class StartPageView : ScrollViewer
             .ToArray();
         if (loose.Length > 0)
         {
-            findings.Children.Add(Group("The export", loose, truncated: false));
+            findings.Children.Add(Group(UiText.ExportGroup(language), loose, truncated: false));
         }
 
         foreach (var table in reading.Tables.Where(table => table.Findings.Count > 0))
@@ -228,7 +247,7 @@ internal sealed class StartPageView : ScrollViewer
         findingsHeading.IsVisible = findings.Children.Count > 0;
     }
 
-    private static Control Group(string heading, IReadOnlyList<Finding> group, bool truncated)
+    private Control Group(string heading, IReadOnlyList<Finding> group, bool truncated)
     {
         var panel = new StackPanel { Orientation = Orientation.Vertical, Spacing = 4 };
         panel.Children.Add(new TextBlock
@@ -245,7 +264,7 @@ internal sealed class StartPageView : ScrollViewer
         {
             Row(grid, index);
             Cell(grid, index, 0, group[index].Code, code: true);
-            Cell(grid, index, 1, MessageCatalogue.Render(group[index], ReportLanguage.English));
+            Cell(grid, index, 1, MessageCatalogue.Render(group[index], language));
         }
 
         panel.Children.Add(grid);
@@ -254,26 +273,39 @@ internal sealed class StartPageView : ScrollViewer
         {
             panel.Children.Add(new TextBlock
             {
-                Text = "Analysis of this table stopped at its limit. It may hold further defects "
-                    + "that were not looked for.",
+                Text = UiText.TruncatedNotice(language),
                 TextWrapping = TextWrapping.Wrap,
                 FontStyle = FontStyle.Italic,
                 Opacity = 0.75,
             });
         }
 
-        return panel;
+        return Card(panel);
     }
 
-    private static TextBlock Section(string text) =>
+    private static TextBlock Section() =>
         new()
         {
-            Text = text,
             FontSize = 16,
             FontWeight = FontWeight.Bold,
             Margin = new Thickness(0, 20, 0, 0),
             IsVisible = false,
         };
+
+    private static Control Card(Control content)
+    {
+        var border = new Border
+        {
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(8),
+            Padding = new Thickness(16, 12),
+            Margin = new Thickness(0, 6, 0, 0),
+            Child = content,
+        };
+        border[!Border.BackgroundProperty] = new DynamicResourceExtension(ReaderTheme.BackgroundElevated);
+        border[!Border.BorderBrushProperty] = new DynamicResourceExtension(ReaderTheme.Border);
+        return border;
+    }
 
     private static void Row(Grid grid, int row)
     {
@@ -314,11 +346,11 @@ internal sealed class StartPageView : ScrollViewer
         var rule = new Border
         {
             Height = 1,
-            Background = RuleBrush,
             Opacity = 0.35,
             VerticalAlignment = VerticalAlignment.Bottom,
             Margin = new Thickness(0, 0, 0, -1),
         };
+        rule[!Border.BackgroundProperty] = new DynamicResourceExtension(ReaderTheme.Border);
 
         Grid.SetRow(rule, row);
         Grid.SetColumn(rule, 0);
@@ -326,37 +358,25 @@ internal sealed class StartPageView : ScrollViewer
         grid.Children.Add(rule);
     }
 
-    private static string Verdict(ExportReading reading, string? exportPath)
+    private static string Verdict(ExportReading reading, string? exportPath, ReportLanguage lang)
     {
         var name = exportPath is null ? string.Empty : " — " + Path.GetFileName(exportPath);
         if (!reading.Complete)
         {
-            return "Reading the export" + name;
+            return UiText.ReadingExport(lang) + name;
         }
 
         return (reading.Verdict == GoBd.Validation.Findings.Verdict.Conformant
-            ? "Conformant"
-            : "Not conformant") + name;
+            ? UiText.Conformant(lang)
+            : UiText.NonConformant(lang)) + name;
     }
 
-    private static string Progress(ExportReading reading)
+    private static string Progress(ExportReading reading, ReportLanguage lang)
     {
         var report = reading.Report;
-        if (reading.Complete)
-        {
-            return string.Create(
-                CultureInfo.InvariantCulture,
-                $"{reading.Tables.Count} table(s), {Size(reading.Bytes)} read. "
-                + $"{report.ErrorCount} error(s), {report.WarningCount} warning(s).");
-        }
-
-        var current = reading.Current is { } table
-            ? $"Reading '{table.Table.Identity}'. "
-            : "Preparing. ";
-
-        return string.Create(
-            CultureInfo.InvariantCulture,
-            $"{current}{Size(reading.BytesRead)} of {Size(reading.Bytes)} read.");
+        return reading.Complete
+            ? UiText.ReadSummary(lang, reading.Tables.Count, Size(reading.Bytes, lang), report.ErrorCount, report.WarningCount)
+            : UiText.ReadProgress(lang, reading.Current?.Table.Identity, Size(reading.BytesRead, lang), Size(reading.Bytes, lang));
     }
 
     /// <summary>
@@ -367,21 +387,21 @@ internal sealed class StartPageView : ScrollViewer
     /// at all. The point of measuring progress rather than guessing it is lost if the measurement
     /// cannot express what it measured.
     /// </remarks>
-    private static string Size(long bytes) => bytes switch
+    private static string Size(long bytes, ReportLanguage lang) => bytes switch
     {
-        < 1024 => string.Create(CultureInfo.InvariantCulture, $"{bytes} B"),
-        < 1024 * 1024 => string.Create(CultureInfo.InvariantCulture, $"{bytes / 1024d:F0} KB"),
-        < 1024L * 1024 * 1024 => string.Create(CultureInfo.InvariantCulture, $"{bytes / (1024d * 1024):F1} MB"),
-        _ => string.Create(CultureInfo.InvariantCulture, $"{bytes / (1024d * 1024 * 1024):F2} GB"),
+        < 1024 => string.Create(UiText.Numbers(lang), $"{bytes} B"),
+        < 1024 * 1024 => string.Create(UiText.Numbers(lang), $"{bytes / 1024d:F0} KB"),
+        < 1024L * 1024 * 1024 => string.Create(UiText.Numbers(lang), $"{bytes / (1024d * 1024):F1} MB"),
+        _ => string.Create(UiText.Numbers(lang), $"{bytes / (1024d * 1024 * 1024):F2} GB"),
     };
 
-    private static string State(TableReading table) => table.State switch
+    private static string State(TableReading table, ReportLanguage lang) => table.State switch
     {
-        TableReadingState.Waiting => "waiting",
-        TableReadingState.Reading => string.Create(CultureInfo.InvariantCulture, $"reading {table.Fraction * 100:F0}%"),
-        TableReadingState.Ready => "read",
-        TableReadingState.Defective => "does not conform",
-        _ => "could not be read",
+        TableReadingState.Waiting => UiText.StateWaiting(lang),
+        TableReadingState.Reading => UiText.StateReading(lang, table.Fraction),
+        TableReadingState.Ready => UiText.StateRead(lang),
+        TableReadingState.Defective => UiText.StateDefective(lang),
+        _ => UiText.StateUnreadable(lang),
     };
 
     /// <summary>
@@ -391,8 +411,6 @@ internal sealed class StartPageView : ScrollViewer
     /// Only for a table that conforms. A defective one is presented as its findings, and a count
     /// of records that do not conform to their declaration is not what a person looks to it for.
     /// </remarks>
-    private static string Records(TableReading table) =>
-        table.State == TableReadingState.Ready
-            ? string.Create(CultureInfo.InvariantCulture, $"{table.Records:N0}")
-            : "—";
+    private static string Records(TableReading table, ReportLanguage lang) =>
+        table.State == TableReadingState.Ready ? UiText.Count(lang, table.Records) : "—";
 }

@@ -1,0 +1,92 @@
+L-0001;Beispiel-Lieferant 01;Lieferant;;;;Deutschland;;;;;;;
+L-0002;Beispiel-Lieferant 02;Lieferant;;;;Deutschland;;;;;;;
+K-0001;Beispiel-Kunde 01;Kunde;Beispielstrasse 1;10116;Musterstadt;Deutschland;kontakt-01@beispiel.example;+49 30 90181001;DE999000001;;Alex-01;Beispiel-01;ansprech-01@beispiel.example
+K-0002;Beispiel-Kunde 02;Kunde;Beispielstrasse 2;10117;Musterstadt;Deutschland;kontakt-02@beispiel.example;+49 30 90181002;DE999000002;;Alex-02;Beispiel-02;ansprech-02@beispiel.example
+K-0003;Beispiel-Kunde 03;Kunde;Beispielstrasse 3;10118;Musterstadt;Österreich;kontakt-03@beispiel.example;;;;Alex-03;Beispiel-03;ansprech-03@beispiel.example
+K-0004;Beispiel-Kunde 04;Kunde;Beispielstrasse 4;10119;Musterstadt;Deutschland;;+49 30 90181003;;;Alex-04;Beispiel-04;ansprech-04@beispiel.example
+K-0005;Beispiel-Kunde 05;Kunde;Beispielstrasse 5;10120;Musterstadt;Deutschland;;+49 30 90181004;;;Alex-05;Beispiel-05;ansprech-05@beispiel.example
+L-0003;Beispiel-Lieferant 03;Lieferant;;;;Deutschland;;;;;;;
+L-0004;Beispiel-Lieferant 04;Lieferant;;;;Deutschland;;;;;;;
+K-0006;Beispiel-Kunde 06;Kunde;Beispielstrasse 6;10121;Musterstadt;Deutschland;;;;;Alex-06;Beispiel-06;ansprech-06@beispiel.example
+L-0005;Beispiel-Lieferant 05;Lieferant;;;;Deutschland;;;;;;;
+L-0006;Beispiel-Lieferant 06;Lieferant;;;;Deutschland;;;;;;;
+L-0007;Beispiel-Lieferant 07;Lieferant;;;;Deutschland;;;;;;;
+K-0007;Beispiel-Kunde 07;Kunde;Beispielstrasse 7;10122;Musterstadt;Deutschland;;;DE999000003;;Alex-07;Beispiel-07;ansprech-07@beispiel.example
+K-0008;Beispiel-Kunde 08;Kunde;Beispielstrasse 8;10123;Musterstadt;Deutschland;;;;;Alex-08;Beispiel-08;ansprech-08@beispiel.example
+L-0008;Beispiel-Lieferant 08;Lieferant;;;;Deutschland;;;;;;;
+K-0009;Beispiel-Kunde 09;Kunde;Beispielstrasse 9;10124;Musterstadt;Deutschland;;;;;;;
+L-0009;Beispiel-Lieferant 09;Lieferant;;;;Deutschland;;;;;;;
+L-0010;Beispiel-Lieferant 10;Lieferant;;;;Deutschland;;;;;;;
+L-0011;Beispiel-Lieferant 11;Lieferant;;;;Deutschland;;;;;;;
+L-0012;Beispiel-Lieferant 12;Lieferant;;;;Deutschland;;;;;;;
+L-0013;Beispiel-Lieferant 13;Lieferant;;;;Deutschland;;;;;;;
+L-0014;Beispiel-Lieferant 14;Lieferant;;;;Deutschland;;;;;;;
+L-0015;Beispiel-Lieferant 15;Lieferant;;;;Deutschland;;;;;;;
+K-0010;Beispiel-Kunde 10;Kunde;Beispielstrasse 10;10125;Musterstadt;Deutschland;;;;;Alex-09;Beispiel-09;ansprech-09@beispiel.example
+L-0016;Beispiel-Lieferant 16;Lieferant;;;;Deutschland;;;;;;;
+K-0011;Beispiel-Kunde 11;Kunde;Beispielstrasse 11;10126;Musterstadt;Deutschland;kontakt-04@beispiel.example;;;;;;
+L-0017;Beispiel-Lieferant 17;Lieferant;;;;Deutschland;;;;;;;
+K-0012;Beispiel-Kunde 12;Kunde;Beispielstrasse 12;10127;Musterstadt;Deutschland;kontakt-05@beispiel.example;;;;Alex-10;Beispiel-10;
+K-0013;Beispiel-Kunde 13;Kunde;Beispielstrasse 13;10128;Musterstadt;Deutschland;kontakt-06@beispiel.example;;;;Alex-11;Beispiel-11;
+L-0018;Beispiel-Lieferant 18;Lieferant;;;;Deutschland;;;;;;;
+L-0019;Beispiel-Lieferant 19;Lieferant;;;;Deutschland;;;;;;;
+K-0014;Beispiel-Kunde 14;Kunde;Beispielstrasse 14;10129;Musterstadt;Deutschland;kontakt-07@beispiel.example;;;;Alex-12;Beispiel-12;
+L-0020;Beispiel-Lieferant 20;Lieferant;;;;Deutschland;;;;;;;
+L-0021;Beispiel-Lieferant 21;Lieferant;;;;Deutschland;;;;;;;
+L-0022;Beispiel-Lieferant 22;Lieferant;;;;Deutschland;;;;;;;
+K-0015;Beispiel-Kunde 15;Kunde;Beispielstrasse 15;10130;Musterstadt;Deutschland;kontakt-08@beispiel.example;+49 30 90181005;;;;;
+K-0016;Beispiel-Kunde 16;Kunde;Beispielstrasse 16;10131;Musterstadt;Deutschland;kontakt-09@beispiel.example;+49 30 90181006;;;Alex-13;Beispiel-13;ansprech-13@beispiel.example
+L-0023;Beispiel-Lieferant 23;Lieferant;;;;Deutschland;;;;;;;
+K-0017;Beispiel-Kunde 17;Kunde;Beispielstrasse 17;10132;Musterstadt;Deutschland;kontakt-10@beispiel.example;+49 30 90181007;;;Alex-14;Beispiel-14;
+K-0018;Beispiel-Kunde 18;Kunde;Beispielstrasse 18;10133;Musterstadt;Deutschland;;;;;;;
+K-0019;Beispiel-Kunde 19;Kunde;Beispielstrasse 19;10134;Musterstadt;Deutschland;kontakt-11@beispiel.example;+49 30 90181008;;;;;
+K-0020;Beispiel-Kunde 20;Kunde;Beispielstrasse 20;10135;Musterstadt;Deutschland;kontakt-12@beispiel.example;+49 30 90181009;;;;;
+L-0024;Beispiel-Lieferant 24;Lieferant;;;;Deutschland;;;;;;;
+L-0025;Beispiel-Lieferant 25;Lieferant;;;;Deutschland;;;;;;;
+L-0026;Beispiel-Lieferant 26;Lieferant;;;;Deutschland;;;;;;;
+L-0027;Beispiel-Lieferant 27;Lieferant;;;;Deutschland;;;;;;;
+K-0021;Beispiel-Kunde 21;Kunde;Beispielstrasse 21;10136;Musterstadt;Deutschland;kontakt-13@beispiel.example;+49 30 90181010;DE999000004;;Alex-15;Beispiel-15;
+L-0028;Beispiel-Lieferant 28;Lieferant;;;;Deutschland;;;;;;;
+K-0022;Beispiel-Kunde 22;Kunde;Beispielstrasse 22;10137;Musterstadt;Deutschland;kontakt-14@beispiel.example;;;;Alex-16;Beispiel-16;
+L-0029;Beispiel-Lieferant 29;Lieferant;;;;Deutschland;;;;;;;
+L-0030;Beispiel-Lieferant 30;Lieferant;;;;Deutschland;;;;;;;
+K-0023;Beispiel-Kunde 23;Kunde;Beispielstrasse 23;10138;Musterstadt;Österreich;kontakt-15@beispiel.example;;DE999000005;;;;
+K-0024;Beispiel-Kunde 24;Kunde;Beispielstrasse 24;10139;Musterstadt;Deutschland;kontakt-16@beispiel.example;;;;Alex-17;Beispiel-17;
+L-0031;Beispiel-Lieferant 31;Lieferant;;;;Deutschland;;;;;;;
+L-0032;Beispiel-Lieferant 32;Lieferant;;;;Deutschland;;;;;;;
+K-0025;Beispiel-Kunde 25;Kunde;Beispielstrasse 25;10140;Musterstadt;Deutschland;kontakt-17@beispiel.example;;DE999000006;;Alex-18;Beispiel-18;ansprech-18@beispiel.example
+L-0033;Beispiel-Lieferant 33;Lieferant;;;;Deutschland;;;;;;;
+L-0034;Beispiel-Lieferant 34;Lieferant;;;;Deutschland;;;;;;;
+L-0035;Beispiel-Lieferant 35;Lieferant;;;;Deutschland;;;;;;;
+L-0036;Beispiel-Lieferant 36;Lieferant;Beispielstrasse 26;10141;Musterstadt;Österreich;kontakt-18@beispiel.example;;;;;;
+L-0037;Beispiel-Lieferant 37;Lieferant;;;;Deutschland;;;;;;;
+L-0038;Beispiel-Lieferant 38;Lieferant;;;;Deutschland;;;;;;;
+K-0026;Beispiel-Kunde 26;Kunde;Beispielstrasse 27;10142;Musterstadt;Deutschland;kontakt-19@beispiel.example;;;;;;
+L-0039;Beispiel-Lieferant 39;Lieferant;;;;Deutschland;;;;;;;
+K-0027;Beispiel-Kunde 27;Kunde;Beispielstrasse 28;10143;Musterstadt;Serbien;kontakt-20@beispiel.example;;;;Alex-19;Beispiel-19;ansprech-19@beispiel.example
+L-0040;Beispiel-Lieferant 40;Lieferant;;;;Deutschland;;;;;;;
+L-0041;Beispiel-Lieferant 41;Lieferant;;;;Deutschland;;;;;;;
+L-0042;Beispiel-Lieferant 42;Lieferant;;;;Deutschland;;;;;;;
+L-0043;Beispiel-Lieferant 43;Lieferant;;;;Deutschland;;;;;;;
+L-0044;Beispiel-Lieferant 44;Lieferant;;;;Deutschland;;;;;;;
+L-0045;Beispiel-Lieferant 45;Lieferant;;;;Deutschland;;;;;;;
+L-0046;Beispiel-Lieferant 46;Lieferant;;;;Deutschland;;;;;;;
+L-0047;Beispiel-Lieferant 47;Lieferant;;;;Deutschland;;;;;;;
+L-0048;Beispiel-Lieferant 48;Lieferant;;;;Deutschland;;;;;;;
+K-0028;Beispiel-Kunde 28;Kunde;Beispielstrasse 29;10144;Musterstadt;Deutschland;kontakt-21@beispiel.example;+49 30 90181011;;;;;
+L-0049;Beispiel-Lieferant 49;Lieferant;Beispielstrasse 30;10145;Musterstadt;Deutschland;;;DE999000007;;;;
+L-0050;Beispiel-Lieferant 50;Lieferant;Beispielstrasse 31;10146;Musterstadt;Deutschland;;;DE999000008;;;;
+L-0051;Beispiel-Lieferant 51;Lieferant;Beispielstrasse 32;10147;Musterstadt;Deutschland;;+49 30 90181012;DE999000009;;;;
+L-0052;Beispiel-Lieferant 52;Lieferant;Beispielstrasse 33;10148;Musterstadt;Deutschland;;+49 30 90181013;DE999000010;DE00999999999999999901;;;
+L-0053;Beispiel-Lieferant 53;Lieferant;Beispielstrasse 34;10149;Musterstadt;Deutschland;;+49 30 90181014;DE999000011;DE00999999999999999902;;;
+L-0054;Beispiel-Lieferant 54;Lieferant;Beispielstrasse 35;10150;Musterstadt;Vereinigte Staaten von Amerika;;+49 30 90181015;;;;;
+L-0055;Beispiel-Lieferant 55;Lieferant;Beispielstrasse 36;10151;Musterstadt;Deutschland;;;DE999000012;DE00999999999999999903;;;
+L-0056;Beispiel-Lieferant 56;Lieferant;Beispielstrasse 37;10152;Musterstadt;Vereinigte Staaten von Amerika;;;;;;;
+K-0029;Beispiel-Kunde 29;Kunde;Beispielstrasse 38;10153;Musterstadt;Deutschland;kontakt-22@beispiel.example;;;;Alex-20;Beispiel-20;
+L-0057;Beispiel-Lieferant 57;Lieferant;Beispielstrasse 39;10154;Musterstadt;Deutschland;kontakt-23@beispiel.example;+49 30 90181016;DE999000013;;;;
+L-0058;Beispiel-Lieferant 58;Lieferant;Beispielstrasse 40;10155;Musterstadt;Irland;;;DE999000014;;;;
+L-0059;Beispiel-Lieferant 59;Lieferant;Beispielstrasse 41;10156;Musterstadt;Deutschland;;+49 30 90181017;DE999000015;DE00999999999999999904;;;
+L-0060;Beispiel-Lieferant 60;Lieferant;Beispielstrasse 42;10157;Musterstadt;Deutschland;;+49 30 90181018;DE999000016;;;;
+L-0061;Beispiel-Lieferant 61;Lieferant;Beispielstrasse 43;10158;Musterstadt;Deutschland;kontakt-24@beispiel.example;+49 30 90181019;DE999000017;;;;
+L-0062;Beispiel-Lieferant 62;Lieferant;Beispielstrasse 44;10159;Musterstadt;Vereinigte Staaten von Amerika;;;DE999000018;;;;
+L-0063;Beispiel-Lieferant 63;Lieferant;Beispielstrasse 45;10160;Musterstadt;Vereinigte Staaten von Amerika;;;DE999000019;;;;

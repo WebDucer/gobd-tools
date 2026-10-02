@@ -1,6 +1,7 @@
 using Avalonia.Controls;
 using GoBd.Reader.Data;
 using GoBd.Reader.Ui.ViewModels;
+using GoBd.Validation.Localisation;
 
 namespace GoBd.Reader.Ui.Tests;
 
@@ -130,5 +131,25 @@ public sealed class FigureControlTests : HeadlessTest
         Driver.Remove(view, "Betrag sum");
 
         totalled.ShouldNotBeNull().ShouldBeEmpty();
+    });
+
+    [Fact]
+    public Task TheStripIsSaidAgainWhenTheLanguageChanges() => Ui(() =>
+    {
+        using var harness = ExportHarness.Create(Tables, ("t.csv", Records));
+        var (view, _) = Driver.Show(harness);
+
+        view.ShowFigures(
+        [
+            new FigureReading(new ColumnFigure(Betrag, Figure.Sum), 60.00m, 0, Exact: true, Rounded: false),
+            new FigureReading(new ColumnFigure(Betrag, Figure.Average), 20.00m, 1, Exact: true, Rounded: true),
+        ]);
+
+        view.SetLanguage(ReportLanguage.German);
+
+        var said = Driver.Texts(view);
+        said.ShouldContain("Betrag Summe 60,00");
+        said.ShouldContain("Betrag Mittelwert 20,00 (gerundet), 1 ohne Wert");
+        said.ShouldNotContain("Betrag sum 60,00");
     });
 }

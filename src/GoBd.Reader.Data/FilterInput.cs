@@ -2,6 +2,7 @@ using System.Globalization;
 using GoBd.Validation.Checks;
 using GoBd.Validation.Content;
 using GoBd.Validation.Model;
+using GoBd.Validation.Localisation;
 
 namespace GoBd.Reader.Data;
 
@@ -38,18 +39,20 @@ public static class FilterInput
     /// <param name="column">The declared column.</param>
     /// <param name="layout">The table's layout, for its declared symbols and year window.</param>
     /// <param name="typed">What the person wrote.</param>
+    /// <param name="language">The language the expected form is described in.</param>
     public static FilterReading For(
         ColumnCapability capability,
         ColumnLayout column,
         RecordLayout layout,
-        string typed)
+        string typed,
+        ReportLanguage language = ReportLanguage.English)
     {
         ArgumentNullException.ThrowIfNull(capability);
         ArgumentNullException.ThrowIfNull(column);
         ArgumentNullException.ThrowIfNull(layout);
         ArgumentNullException.ThrowIfNull(typed);
 
-        var expected = Expected(capability, column, layout);
+        var expected = Expected(capability, column, layout, language);
 
         // Nothing typed is not a value that failed to read: it is a bound left open, and a filter
         // that wants one says so by leaving it empty.
@@ -78,20 +81,33 @@ public static class FilterInput
     }
 
     /// <summary>The form a column's filter expects, in the terms its own declaration uses.</summary>
-    public static string Expected(ColumnCapability capability, ColumnLayout column, RecordLayout layout)
+    /// <remarks>
+    /// The symbols and masks are the declaration's in either language; only the words around
+    /// them are translated.
+    /// </remarks>
+    public static string Expected(
+        ColumnCapability capability,
+        ColumnLayout column,
+        RecordLayout layout,
+        ReportLanguage language = ReportLanguage.English)
     {
         ArgumentNullException.ThrowIfNull(capability);
         ArgumentNullException.ThrowIfNull(column);
         ArgumentNullException.ThrowIfNull(layout);
 
+        var german = language == ReportLanguage.German;
         return capability.Kind switch
         {
-            ColumnQueryKind.Number => layout.DigitGroupingSymbol.Length > 0
-                ? $"a number, decimals after '{layout.DecimalSymbol}', thousands grouped by '{layout.DigitGroupingSymbol}'"
-                : $"a number, decimals after '{layout.DecimalSymbol}'",
+            ColumnQueryKind.Number => (german, layout.DigitGroupingSymbol.Length > 0) switch
+            {
+                (true, true) => $"eine Zahl, Dezimalstellen nach '{layout.DecimalSymbol}', Tausender gruppiert durch '{layout.DigitGroupingSymbol}'",
+                (true, false) => $"eine Zahl, Dezimalstellen nach '{layout.DecimalSymbol}'",
+                (false, true) => $"a number, decimals after '{layout.DecimalSymbol}', thousands grouped by '{layout.DigitGroupingSymbol}'",
+                (false, false) => $"a number, decimals after '{layout.DecimalSymbol}'",
+            },
             ColumnQueryKind.Date => Mask(column),
-            ColumnQueryKind.Time => DeclaredSql.TimeMaskOf(column) ?? "a time",
-            _ => "text",
+            ColumnQueryKind.Time => DeclaredSql.TimeMaskOf(column) ?? (german ? "eine Uhrzeit" : "a time"),
+            _ => german ? "Text" : "text",
         };
     }
 

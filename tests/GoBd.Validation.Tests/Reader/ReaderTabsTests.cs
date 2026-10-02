@@ -1,5 +1,6 @@
 using GoBd.Reader.Ui.ViewModels;
 using GoBd.Validation.Model;
+using GoBd.Validation.Localisation;
 
 namespace GoBd.Validation.Tests.Reader;
 
@@ -308,13 +309,13 @@ public sealed class ReaderTabsTests
 
         var landed = tabs.Apply(session.Follow(orders, 1, session.KeysAt(orders, 1).ShouldHaveSingleItem()));
         landed.ShouldNotBeNull().Table.ShouldBe(customers);
-        landed.Status.ShouldContain("K1");
+        landed.Status(ReportLanguage.English).ShouldContain("K1");
 
         // The table the navigation started from says nothing about it.
-        tabs.Open(orders).Status.ShouldBeEmpty();
+        tabs.Open(orders).Status(ReportLanguage.English).ShouldBeEmpty();
 
         // And the message is still there when its own table is returned to, unchanged.
-        tabs.Open(customers).Status.ShouldContain("K1");
+        tabs.Open(customers).Status(ReportLanguage.English).ShouldContain("K1");
     }
 
     [Fact]
@@ -330,8 +331,11 @@ public sealed class ReaderTabsTests
 
         var tab = tabs.Apply(session.Follow(orders, 1, session.KeysAt(orders, 1).ShouldHaveSingleItem()));
 
-        tab.ShouldNotBeNull().Status.ShouldContain("does not resolve");
+        tab.ShouldNotBeNull().Status(ReportLanguage.English).ShouldContain("does not resolve");
         tab.Walk.ShouldBeNull();
+
+        // Said when shown, so a change of language reaches a status already standing.
+        tab.Status(ReportLanguage.German).ShouldContain("lässt sich nicht auflösen");
     }
 
     [Fact]
@@ -344,7 +348,7 @@ public sealed class ReaderTabsTests
         var navigation = session.Follow(orders, 1, session.KeysAt(orders, 1).ShouldHaveSingleItem());
 
         navigation.Kind.ShouldBe(NavigationKind.NotReady);
-        ReaderTabs.Describe(navigation).ShouldContain("still being read");
+        ReaderTabs.Describe(navigation, ReportLanguage.English).ShouldContain("still being read");
     }
 
     private static ResolvedForeignKey Backwards(ReaderSession session, TableNode referring, TableNode referenced)

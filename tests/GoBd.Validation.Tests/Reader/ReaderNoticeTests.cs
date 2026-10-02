@@ -1,4 +1,5 @@
 using GoBd.Reader.Ui.ViewModels;
+using GoBd.Validation.Localisation;
 
 namespace GoBd.Validation.Tests.Reader;
 
@@ -55,12 +56,15 @@ public sealed class ReaderNoticeTests
         notices.Count.ShouldBe(2);
 
         var amount = notices.First(notice => notice.Column == "Betrag");
-        amount.Text.ShouldContain("no filter, sort or figure");
-        amount.Text.ShouldContain("still shown");
+        amount.Text(ReportLanguage.English).ShouldContain("no filter, sort or figure");
+        amount.Text(ReportLanguage.English).ShouldContain("still shown");
 
         var time = notices.First(notice => notice.Column == "Zeit");
-        time.Text.ShouldContain("1 of its values");
-        time.Text.ShouldContain("absent");
+        time.Text(ReportLanguage.English).ShouldContain("1 of its values");
+        time.Text(ReportLanguage.English).ShouldContain("absent");
+
+        // Said when shown, so the summary says it in whichever language is chosen.
+        time.Text(ReportLanguage.German).ShouldContain("1 seiner Werte");
     }
 
     [Fact]

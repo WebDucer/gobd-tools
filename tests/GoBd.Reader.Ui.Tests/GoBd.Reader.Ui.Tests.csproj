@@ -9,6 +9,12 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- The UI tests drive the UI and Semi.Avalonia, so they run in the reader's own mode:
+         invariant, with cultures creatable by name. -->
+    <RuntimeHostConfigurationOption Include="System.Globalization.PredefinedCulturesOnly" Value="false" Trim="true" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
     <PackageReference Include="Shouldly" />
     <PackageReference Include="xunit.v3" />
