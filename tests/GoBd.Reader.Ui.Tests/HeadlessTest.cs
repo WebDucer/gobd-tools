@@ -37,9 +37,9 @@ public abstract class HeadlessTest
         Session.Dispatch(body, TestContext.Current.CancellationToken);
 
     /// <summary>
-    /// Runs a test body that changes what the whole application holds — its theme, and on macOS
-    /// its menu's language — and puts both back after, because every test shares the one
-    /// application and the next one must not find it dark or in German.
+    /// Runs a test body that changes what the whole application holds — its theme, its zoom, and
+    /// on macOS its menu's language — and puts them back after, because every test shares the one
+    /// application and the next one must not find it dark, enlarged or in German.
     /// </summary>
     protected static void RestoringApplication(Action body)
     {
@@ -55,6 +55,7 @@ public abstract class HeadlessTest
         {
             application.RequestedThemeVariant = theme;
             (application as App)?.UpdateApplicationMenuLanguage(ReportLanguage.English);
+            ZoomLevel.Current.Set(UserPreferences.ActualSize);
         }
     }
 

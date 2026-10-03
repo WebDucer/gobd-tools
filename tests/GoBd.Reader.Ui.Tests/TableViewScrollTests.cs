@@ -55,4 +55,48 @@ public sealed class TableViewScrollTests : HeadlessTest
             tv.GetVisualDescendants().OfType<TableViewColumnHeadersPresenter>().ShouldNotBeEmpty();
         });
     });
+
+    [Fact]
+    public Task AtTwiceTheSizeTheGridStillRealisesOnlyTheRowsItShows() => Ui(() => RestoringApplication(() =>
+    {
+        // Ten thousand rows of ten columns: realising them all would show at once in the count.
+        var rows = Enumerable.Range(1, 10_000).Select(row => $"Row {row}").ToArray();
+
+        int Realised(int percent, out TimeSpan scrolling)
+        {
+            ZoomLevel.Current.Set(percent);
+            var tv = new TableView { ItemsSource = rows };
+            for (var column = 0; column < 10; column++)
+            {
+                tv.Columns.Add(new TableViewColumn { Header = $"Col {column}", Width = new GridLength(120) });
+            }
+
+            var window = new Window { Content = new Zoomed(tv), Width = 1000, Height = 700 };
+            window.Show();
+            try
+            {
+                window.UpdateLayout();
+                var clock = System.Diagnostics.Stopwatch.StartNew();
+                for (var page = 0; page < 50; page++)
+                {
+                    tv.ScrollIntoView(page * 200);
+                    window.UpdateLayout();
+                }
+
+                scrolling = clock.Elapsed;
+                return tv.GetVisualDescendants().OfType<TableViewRow>().Count();
+            }
+            finally
+            {
+                window.Close();
+            }
+        }
+
+        var actual = Realised(100, out var atActual);
+        var doubled = Realised(200, out var atDouble);
+        TestContext.Current.SendDiagnosticMessage($"Rows realised: {actual} at 100 %, {doubled} at 200 %. Fifty jumps: {atActual.TotalMilliseconds:F0} ms at 100 %, {atDouble.TotalMilliseconds:F0} ms at 200 %.");
+
+        doubled.ShouldBeLessThan(60);
+        doubled.ShouldBeLessThanOrEqualTo(actual);
+    }));
 }

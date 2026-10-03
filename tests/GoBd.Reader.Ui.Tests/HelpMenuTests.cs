@@ -34,10 +34,11 @@ public sealed class HelpMenuTests : HeadlessTest
                 </Table>
         """;
 
-    private static IReadOnlyList<NativeMenuItem> Items(NativeMenu menu) => [.. menu.Items.OfType<NativeMenuItem>()];
+    private static IReadOnlyList<NativeMenuItem> Items(NativeMenu menu) =>
+        [.. menu.Items.OfType<NativeMenuItem>().Where(item => item is not NativeMenuItemSeparator)];
 
     private static NativeMenu Help(MainWindow window) =>
-        Items(NativeMenu.GetMenu(window).ShouldNotBeNull()).Single(item => (string?)item.Header == "Help").Menu.ShouldNotBeNull();
+        Items(NativeMenu.GetMenu(window).ShouldNotBeNull()).Single(item => Driver.Plain(item.Header) == "Help").Menu.ShouldNotBeNull();
 
     /// <summary>The application's own menu, which macOS shows under the application's name.</summary>
     private static NativeMenu? ApplicationMenu() =>
@@ -50,7 +51,7 @@ public sealed class HelpMenuTests : HeadlessTest
     private static Window Choose(MainWindow window, string entry)
     {
         var offered = Items(Help(window)).Concat(ApplicationMenu() is { } application ? Items(application) : []);
-        var item = offered.Single(candidate => (string?)candidate.Header == entry);
+        var item = offered.Single(candidate => Driver.Plain(candidate.Header) == entry);
         item.Command.ShouldNotBeNull().Execute(null);
         return window.OwnedWindows.Single(owned => owned.Title == entry);
     }
@@ -134,15 +135,15 @@ public sealed class HelpMenuTests : HeadlessTest
     });
 
     [Fact]
-    public Task TheHelpMenuFollowsFileAndOffersTheThreeTexts() => Ui(() => WithWindow(new MainWindow(null), window =>
+    public Task TheHelpMenuComesLastAndOffersTheShortcutsAndTheThreeTexts() => Ui(() => WithWindow(new MainWindow(null), window =>
     {
-        Items(NativeMenu.GetMenu(window).ShouldNotBeNull()).Select(item => (string?)item.Header)
-            .ShouldBe(["File", "Help"]);
+        Items(NativeMenu.GetMenu(window).ShouldNotBeNull()).Select(item => Driver.Plain(item.Header))
+            .ShouldBe(["File", "View", "Go", "Table", "Help"]);
 
-        var offered = Items(Help(window)).Select(item => (string?)item.Header).ToArray();
+        var offered = Items(Help(window)).Select(item => Driver.Plain(item.Header)).ToArray();
         offered.ShouldBe(OperatingSystem.IsMacOS()
-            ? [Licence, Notice, Notices]
-            : [Licence, Notice, Notices, About]);
+            ? ["Keyboard Shortcuts", Licence, Notice, Notices]
+            : ["Keyboard Shortcuts", Licence, Notice, Notices, About]);
     }));
 
     [Fact]
@@ -153,14 +154,14 @@ public sealed class HelpMenuTests : HeadlessTest
         var application = ApplicationMenu();
         if (OperatingSystem.IsMacOS())
         {
-            Items(application.ShouldNotBeNull()).Select(item => (string?)item.Header)
+            Items(application.ShouldNotBeNull()).Select(item => Driver.Plain(item.Header))
                 .ShouldContain(About);
         }
         else
         {
-            (application is null || Items(application).All(item => (string?)item.Header != About))
+            (application is null || Items(application).All(item => Driver.Plain(item.Header) != About))
                 .ShouldBeTrue("only macOS has an application menu");
-            Items(Help(window)).Select(item => (string?)item.Header).ShouldContain(About);
+            Items(Help(window)).Select(item => Driver.Plain(item.Header)).ShouldContain(About);
         }
     }));
 
@@ -266,6 +267,6 @@ public sealed class HelpMenuTests : HeadlessTest
         licence.Title.ShouldBe("Lizenz");
         about.Title.ShouldBe("Über GoBD Reader");
         about.GetLogicalDescendants().OfType<HyperlinkButton>().Single().Content.ShouldBe("Projektseite");
-        Items(NativeMenu.GetMenu(window).ShouldNotBeNull()).Select(item => item.Header).ShouldContain("Hilfe");
+        Items(NativeMenu.GetMenu(window).ShouldNotBeNull()).Select(item => Driver.Plain(item.Header)).ShouldContain("Hilfe");
     })));
 }

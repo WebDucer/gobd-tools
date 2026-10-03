@@ -29,14 +29,13 @@ internal sealed class AboutWindow : Window, ILocalized
     {
         TextWrapping = TextWrapping.Wrap,
         TextAlignment = TextAlignment.Center,
-        Opacity = 0.85,
     };
 
     private readonly TextBlock terms = new()
     {
         TextWrapping = TextWrapping.Wrap,
         TextAlignment = TextAlignment.Center,
-        Opacity = 0.7,
+        Classes = { ReaderTheme.MutedClass },
     };
 
     private readonly HyperlinkButton project = new()
@@ -64,8 +63,7 @@ internal sealed class AboutWindow : Window, ILocalized
         ArgumentNullException.ThrowIfNull(showNotices);
 
         Icon = ReaderIcon.ForWindow();
-        Width = 460;
-        SizeToContent = SizeToContent.Height;
+        SizeToContent = SizeToContent.WidthAndHeight;
         CanResize = false;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
 
@@ -88,7 +86,7 @@ internal sealed class AboutWindow : Window, ILocalized
         var version = new SelectableTextBlock
         {
             Text = VersionText,
-            Opacity = 0.75,
+            Classes = { ReaderTheme.MutedClass },
             HorizontalAlignment = HorizontalAlignment.Center,
         };
 
@@ -106,17 +104,20 @@ internal sealed class AboutWindow : Window, ILocalized
 
         close.Click += (_, _) => Close();
 
-        Content = new StackPanel
+        // Sized by its content, so the window grows with the zoom rather than clipping it.
+        Content = ReaderWindows.Scrolling(new Zoomed(new StackPanel
         {
             Margin = new Thickness(28, 24),
             Spacing = 12,
+            Width = 404,
             Children = { picture, name, version, what, terms, project, texts, close },
-        };
+        }));
+        ReaderWindows.OpenUsable(this);
 
-        // Escape closes it, as a window with nothing to decide should.
+        // Escape closes it, as a window with nothing to decide should, and Cmd+W on macOS.
         KeyDown += (_, args) =>
         {
-            if (args.Key == Key.Escape)
+            if (ReaderKeys.CloseDialog.Matches(args))
             {
                 args.Handled = true;
                 Close();

@@ -105,6 +105,14 @@ public static class UiText
     public static string ReadProgress(ReportLanguage l, string? table, string read, string whole) => IsDe(l)
         ? (table is null ? "Vorbereitung. " : $"Lese '{table}'. ") + $"{read} von {whole} eingelesen."
         : (table is null ? "Preparing. " : $"Reading '{table}'. ") + $"{read} of {whole} read.";
+    public static string ReadingProgressName(ReportLanguage l) => IsDe(l) ? "Lesefortschritt" : "Reading progress";
+    public static string ReadingPercent(ReportLanguage l, int percent) => IsDe(l)
+        ? string.Create(CultureInfo.InvariantCulture, $"Export zu {percent} % eingelesen.")
+        : string.Create(CultureInfo.InvariantCulture, $"Export {percent}% read.");
+    public static string TableFinished(ReportLanguage l, string table, string state) => $"'{table}': {state}.";
+    public static string ReadingFinished(ReportLanguage l, int tables, int errors, int warnings) => IsDe(l)
+        ? string.Create(CultureInfo.InvariantCulture, $"{tables} Tabelle(n) eingelesen. {errors} Fehler, {warnings} Warnung(en).")
+        : string.Create(CultureInfo.InvariantCulture, $"{tables} table(s) read. {errors} error(s), {warnings} warning(s).");
     public static string StateWaiting(ReportLanguage l) => IsDe(l) ? "wartend" : "waiting";
     public static string StateReading(ReportLanguage l, double fraction) => IsDe(l)
         ? string.Create(CultureInfo.InvariantCulture, $"liest {fraction * 100:F0}%")
@@ -159,6 +167,9 @@ public static class UiText
     public static string RefersToNothing(ReportLanguage l, string leads) => IsDe(l)
         ? $"Verweist auf '{leads}', das keinen solchen Datensatz enthält."
         : $"Refers to '{leads}', which holds no such record.";
+    public static string FollowKey(ReportLanguage l, string columns, string table, bool refersToNothing) => IsDe(l)
+        ? $"{columns} folgen → '{table}'" + (refersToNothing ? " (verweist auf nichts)" : string.Empty)
+        : $"Follow {columns} → '{table}'" + (refersToNothing ? " (refers to nothing)" : string.Empty);
     public static string ReferrersMenu(ReportLanguage l, string table) => IsDe(l)
         ? $"Datensätze in '{table}', die hierauf verweisen"
         : $"Records in '{table}' referring to this";
@@ -167,6 +178,18 @@ public static class UiText
     public static string RecordOfReferring(ReportLanguage l, long index, long matches, string value) => IsDe(l)
         ? string.Create(CultureInfo.InvariantCulture, $"Datensatz {index} von {matches}, die auf '{value}' verweisen.")
         : string.Create(CultureInfo.InvariantCulture, $"Record {index} of {matches} referring to '{value}'.");
+    public static string GoToRecordHeading(ReportLanguage l) => IsDe(l) ? "Gehe zu Datensatz" : "Go to record";
+    public static string GoTo(ReportLanguage l) => IsDe(l) ? "Gehe zu" : "Go";
+    public static string RecordNumberField(ReportLanguage l) => IsDe(l) ? "Datensatznummer" : "Record number";
+    public static string RecordRange(ReportLanguage l, long count) => IsDe(l)
+        ? string.Create(Numbers(l), $"Eine Datensatznummer von 1 bis {count:N0}, wie die Datei zählt.")
+        : string.Create(Numbers(l), $"A record number from 1 to {count:N0}, as the file counts records.");
+    public static string NoSuchRecord(ReportLanguage l, string typed, long count) => IsDe(l)
+        ? string.Create(Numbers(l), $"'{typed}' ist keine Datensatznummer dieser Tabelle. Sie hat die Datensätze 1 bis {count:N0}.")
+        : string.Create(Numbers(l), $"'{typed}' is not a record number of this table. It holds records 1 to {count:N0}.");
+    public static string RecordReached(ReportLanguage l, long ordinal) => IsDe(l)
+        ? string.Create(Numbers(l), $"Datensatz {ordinal:N0}.")
+        : string.Create(Numbers(l), $"Record {ordinal:N0}.");
     public static string RecordFor(ReportLanguage l, long ordinal, string value) => IsDe(l)
         ? string.Create(CultureInfo.InvariantCulture, $"Datensatz {ordinal} für '{value}'.")
         : string.Create(CultureInfo.InvariantCulture, $"Record {ordinal} for '{value}'.");
@@ -183,6 +206,22 @@ public static class UiText
     public static string FilterRemoved(ReportLanguage l, long ordinal) => IsDe(l)
         ? string.Create(CultureInfo.InvariantCulture, $"Filter entfernt, um Datensatz {ordinal} anzuzeigen.")
         : string.Create(CultureInfo.InvariantCulture, $"Filter removed to show record {ordinal}.");
+
+    public static string FindingsOf(ReportLanguage l, string table) => IsDe(l) ? $"Feststellungen zu '{table}'" : $"Findings about '{table}'";
+
+    // Record names
+    public static string RecordName(ReportLanguage l, long ordinal, string values) => IsDe(l)
+        ? string.Create(Numbers(l), $"Datensatz {ordinal:N0}: {values}")
+        : string.Create(Numbers(l), $"Record {ordinal:N0}: {values}");
+    public static string RefersToNothingMark(ReportLanguage l) => IsDe(l) ? "verweist auf nichts" : "refers to nothing";
+
+    // Editor fields
+    public static string ColumnField(ReportLanguage l) => IsDe(l) ? "Spalte" : "Column";
+    public static string ComparisonField(ReportLanguage l) => IsDe(l) ? "Vergleich" : "Comparison";
+    public static string ValueField(ReportLanguage l) => IsDe(l) ? "Wert" : "Value";
+    public static string SecondValueField(ReportLanguage l) => IsDe(l) ? "Zweiter Wert, bis zu dem verglichen wird" : "Second value, up to which to compare";
+    public static string DirectionField(ReportLanguage l) => IsDe(l) ? "Richtung" : "Direction";
+    public static string FigureField(ReportLanguage l) => IsDe(l) ? "Kennzahl" : "Figure";
 
     // Editors & Comparers
     public static string FilterHeading(ReportLanguage l) => "Filter";
@@ -243,6 +282,47 @@ public static class UiText
 
     // Menus
     public static string FileMenu(ReportLanguage l) => IsDe(l) ? "Datei" : "File";
+    public static string ViewMenu(ReportLanguage l) => IsDe(l) ? "Ansicht" : "View";
+    public static string GoMenu(ReportLanguage l) => IsDe(l) ? "Gehe zu" : "Go";
+    public static string TableMenu(ReportLanguage l) => IsDe(l) ? "Tabelle" : "Table";
+    public static string CloseTabMenu(ReportLanguage l) => IsDe(l) ? "Tab schließen" : "Close Tab";
+    public static string ZoomIn(ReportLanguage l) => IsDe(l) ? "Vergrößern" : "Zoom In";
+    public static string ZoomOut(ReportLanguage l) => IsDe(l) ? "Verkleinern" : "Zoom Out";
+    public static string ActualSize(ReportLanguage l) => IsDe(l) ? "Originalgröße" : "Actual Size";
+    public static string NavigatorName(ReportLanguage l) => IsDe(l) ? "Navigator: Medien und Tabellen des Exports" : "Navigator: the export's media and tables";
+    public static string NavigatorWidth(ReportLanguage l) => IsDe(l) ? "Breite des Navigators" : "Navigator width";
+    public static string ShowNavigator(ReportLanguage l) => IsDe(l) ? "Navigator anzeigen" : "Show Navigator";
+    public static string NextTab(ReportLanguage l) => IsDe(l) ? "Nächster Tab" : "Next Tab";
+    public static string PreviousTab(ReportLanguage l) => IsDe(l) ? "Vorheriger Tab" : "Previous Tab";
+    public static string Back(ReportLanguage l) => IsDe(l) ? "Zurück" : "Back";
+    public static string Forward(ReportLanguage l) => IsDe(l) ? "Vorwärts" : "Forward";
+    public static string GoToRecordMenu(ReportLanguage l) => IsDe(l) ? "Gehe zu Datensatz…" : "Go to Record…";
+    public static string NextReferringMenu(ReportLanguage l) => IsDe(l) ? "Nächster verweisender Datensatz" : "Next Referring Record";
+    public static string PreviousReferringMenu(ReportLanguage l) => IsDe(l) ? "Vorheriger verweisender Datensatz" : "Previous Referring Record";
+    public static string AddFilterMenu(ReportLanguage l) => IsDe(l) ? "Filter hinzufügen…" : "Add Filter…";
+    public static string AddSortMenu(ReportLanguage l) => IsDe(l) ? "Sortierspalte hinzufügen…" : "Add Sort Column…";
+    public static string AddFigureMenu(ReportLanguage l) => IsDe(l) ? "Kennzahl hinzufügen…" : "Add Figure…";
+    public static string FileOrderMenu(ReportLanguage l) => IsDe(l) ? "Zurück zur Dateireihenfolge" : "Back to File Order";
+    public static string KeyboardShortcuts(ReportLanguage l) => IsDe(l) ? "Tastenkombinationen" : "Keyboard Shortcuts";
+    public static string NextArea(ReportLanguage l) => IsDe(l) ? "Zum nächsten Bereich" : "Move to the next area";
+    public static string PreviousArea(ReportLanguage l) => IsDe(l) ? "Zum vorherigen Bereich" : "Move to the previous area";
+    public static string TabAt(ReportLanguage l, int place) => IsDe(l)
+        ? string.Create(CultureInfo.InvariantCulture, $"Tab {place} nach vorn holen (1 ist die Übersicht)")
+        : string.Create(CultureInfo.InvariantCulture, $"Bring tab {place} to the front (1 is the summary)");
+    public static string RecordActions(ReportLanguage l) => IsDe(l) ? "Aktionen für den Datensatz" : "Actions for the record";
+    public static string CopyRecord(ReportLanguage l) => IsDe(l) ? "Datensatz kopieren" : "Copy Record";
+    public static string ScrollLeft(ReportLanguage l) => IsDe(l) ? "Nach links blättern" : "Scroll left";
+    public static string ScrollRight(ReportLanguage l) => IsDe(l) ? "Nach rechts blättern" : "Scroll right";
+    public static string OpenTable(ReportLanguage l) => IsDe(l) ? "Tabelle öffnen" : "Open the table";
+    public static string TabsByPlace(ReportLanguage l) => IsDe(l)
+        ? "Den Tab an dieser Stelle nach vorn holen (1 ist die Übersicht)"
+        : "Bring the tab in that place to the front (1 is the summary)";
+    public static string ShortcutsEverywhere(ReportLanguage l) => IsDe(l) ? "Überall" : "Everywhere";
+    public static string ShortcutsInRecords(ReportLanguage l) => IsDe(l) ? "In den Datensätzen einer Tabelle" : "In a table's records";
+    public static string ShortcutsInNavigator(ReportLanguage l) => IsDe(l) ? "Im Navigator" : "In the navigator";
+    public static string ShortcutsDialogs(ReportLanguage l) => IsDe(l)
+        ? "Escape schließt einen Editor oder ein Fenster. Ein Menü öffnet sich unter Windows und Linux mit Alt und dem unterstrichenen Buchstaben."
+        : "Escape closes an editor or a window. On Windows and Linux, Alt with the underlined letter opens a menu.";
     public static string OpenArchive(ReportLanguage l) => IsDe(l) ? "Archiv öffnen…" : "Open Archive…";
     public static string OpenFolder(ReportLanguage l) => IsDe(l) ? "Ordner öffnen…" : "Open Folder…";
     public static string SettingsMenu(ReportLanguage l) => IsDe(l) ? "Einstellungen…" : "Settings…";
@@ -263,10 +343,17 @@ public static class UiText
     public static string ThemeSystem(ReportLanguage l) => IsDe(l) ? "Systemstandard" : "System default";
     public static string ThemeLight(ReportLanguage l) => IsDe(l) ? "Hell" : "Light";
     public static string ThemeDark(ReportLanguage l) => IsDe(l) ? "Dunkel" : "Dark";
+    public static string ThemeHighContrastDark(ReportLanguage l) => IsDe(l) ? "Hoher Kontrast (dunkel)" : "High contrast (dark)";
+    public static string ThemeHighContrastLight(ReportLanguage l) => IsDe(l) ? "Hoher Kontrast (hell)" : "High contrast (light)";
     public static string LanguageSection(ReportLanguage l) => IsDe(l) ? "Sprache" : "Language";
     public static string DisplayLanguageLabel(ReportLanguage l) => IsDe(l) ? "Anzeigesprache:" : "Display Language:";
     public static string LangEnglish(ReportLanguage l) => IsDe(l) ? "Englisch" : "English";
     public static string LangGerman(ReportLanguage l) => "Deutsch";
+    public static string ZoomLabel(ReportLanguage l) => IsDe(l) ? "Vergrößerung:" : "Zoom:";
+    public static string ZoomSelection(ReportLanguage l) => IsDe(l) ? "Auswahl der Vergrößerung" : "Zoom selection";
+    public static string Percent(ReportLanguage l, int percent) => IsDe(l)
+        ? string.Create(CultureInfo.InvariantCulture, $"{percent} %")
+        : string.Create(CultureInfo.InvariantCulture, $"{percent}%");
     public static string ThemeSelection(ReportLanguage l) => IsDe(l) ? "Designauswahl" : "Theme selection";
     public static string LanguageSelection(ReportLanguage l) => IsDe(l) ? "Sprachauswahl" : "Language selection";
     public static string CloseSettings(ReportLanguage l) => IsDe(l) ? "Einstellungen schließen" : "Close settings";

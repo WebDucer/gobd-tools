@@ -138,6 +138,54 @@ public sealed class ReaderTabs(ReaderSession session)
     /// <summary>The table tabs, in the order they were opened.</summary>
     public IReadOnlyList<TableTab> Tables => tables;
 
+    /// <summary>Where navigations in this export started and what they reached.</summary>
+    /// <remarks>
+    /// Held here, which exists once per opened export, so opening another export starts a history
+    /// of its own.
+    /// </remarks>
+    public NavigationHistory History { get; } = new();
+
+    /// <summary>Remembers a navigation, from the record it started from to the one it reached.</summary>
+    /// <param name="from">The table it started from.</param>
+    /// <param name="ordinal">The record it started from, or none for the table alone.</param>
+    /// <param name="navigation">Where it led.</param>
+    public void Remember(TableNode from, long? ordinal, Navigation navigation)
+    {
+        ArgumentNullException.ThrowIfNull(from);
+        ArgumentNullException.ThrowIfNull(navigation);
+
+        if (navigation.Table is not { } reached)
+        {
+            return;
+        }
+
+        History.Record(
+            new Place(session.Own(from), ordinal),
+            new Place(session.Own(reached), navigation.Kind == NavigationKind.Positioned ? navigation.Ordinal : null));
+    }
+
+    /// <summary>
+    /// The navigation that reaches a record by its number, or none when the table holds no record
+    /// of that number or has no records to show.
+    /// </summary>
+    /// <remarks>
+    /// Positioned in the table's own order, as a reference is followed, so that a view hiding the
+    /// record has its filter lifted the same way. Going back and forward reaches a place this way
+    /// too.
+    /// </remarks>
+    public Navigation? Reach(TableNode table, long ordinal)
+    {
+        ArgumentNullException.ThrowIfNull(table);
+
+        var owned = session.Own(table);
+        if (session.View(owned) is not { Kind: TableViewKind.Data, Rows: { } rows } || rows.IndexOfOrdinal(ordinal) is var position && position < 0)
+        {
+            return null;
+        }
+
+        return new Navigation(NavigationKind.Positioned, owned, ordinal, position, [], 1, 0, string.Empty);
+    }
+
     /// <summary>The tab in front, or null when that is the start page.</summary>
     public TableTab? Active { get; private set; }
 
@@ -344,6 +392,9 @@ public sealed class ReaderTabs(ReaderSession session)
         {
             NavigationKind.Positioned when navigation.Matches > 1 =>
                 UiText.RecordOfReferring(language, navigation.MatchIndex + 1, navigation.Matches, navigation.Value),
+
+            // Reached by its number, going back or forward, rather than by a value.
+            NavigationKind.Positioned when navigation.Value.Length == 0 => UiText.RecordReached(language, navigation.Ordinal),
             NavigationKind.Positioned => UiText.RecordFor(language, navigation.Ordinal, navigation.Value),
             NavigationKind.Unresolved => UiText.ReferenceUnresolved(language, navigation.Value, table),
             NavigationKind.Unreadable => UiText.ReferenceUnreadable(language, table),

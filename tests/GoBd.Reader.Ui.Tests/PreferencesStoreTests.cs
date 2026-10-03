@@ -78,6 +78,63 @@ public sealed class PreferencesStoreTests
     }
 
     [Fact]
+    public void AnAppearanceALaterVersionAddedKeepsTheLanguage()
+    {
+        // A name this reader does not know is the one choice it costs: the language stays.
+        using var preferences = new TemporaryPreferences();
+        File.WriteAllText(preferences.Store.FilePath, """{"Theme":"Sepia","Language":"German","Zoom":150}""");
+
+        preferences.Store.Load().ShouldBe(new UserPreferences(ThemePreference.System, ReportLanguage.German, Zoom: 150));
+    }
+
+    [Fact]
+    public void AChoiceInAFormNoBuildWroteTakesItsDefaultAlone()
+    {
+        using var preferences = new TemporaryPreferences();
+        File.WriteAllText(preferences.Store.FilePath, """{"Theme":"","Language":"2","Zoom":"big","NavigatorCollapsed":"yes","NavigatorWidth":420}""");
+
+        preferences.Store.Load().ShouldBe(new UserPreferences(
+            ThemePreference.System,
+            LanguageResolver.Resolve(null).Language,
+            NavigatorWidth: 420));
+    }
+
+    [Fact]
+    public void TheNewChoicesRoundTrip()
+    {
+        using var preferences = new TemporaryPreferences();
+        var chosen = new UserPreferences(ThemePreference.HighContrastLight, ReportLanguage.German, 175, 410.5, NavigatorCollapsed: true);
+        preferences.Store.Save(chosen);
+
+        preferences.Store.Load().ShouldBe(chosen);
+        File.ReadAllText(preferences.Store.FilePath).ShouldContain("\"HighContrastLight\"");
+    }
+
+    [Fact]
+    public void ZoomAndWidthAreKeptWithinWhatTheReaderOffers()
+    {
+        using var preferences = new TemporaryPreferences();
+        File.WriteAllText(preferences.Store.FilePath, """{"Zoom":900,"NavigatorWidth":12}""");
+        var loaded = preferences.Store.Load();
+        loaded.Zoom.ShouldBe(UserPreferences.LargestZoom);
+        loaded.NavigatorWidth.ShouldBe(UserPreferences.NarrowestNavigator);
+
+        File.WriteAllText(preferences.Store.FilePath, """{"Zoom":40,"NavigatorWidth":99999}""");
+        loaded = preferences.Store.Load();
+        loaded.Zoom.ShouldBe(UserPreferences.ActualSize);
+        loaded.NavigatorWidth.ShouldBe(UserPreferences.WidestNavigator);
+    }
+
+    [Fact]
+    public void AFileOfAnotherShapeGivesTheDefaults()
+    {
+        using var preferences = new TemporaryPreferences();
+        File.WriteAllText(preferences.Store.FilePath, "[1,2,3]");
+
+        preferences.Store.Load().ShouldBe(UserPreferences.Default);
+    }
+
+    [Fact]
     public void DefaultPathIsPlatformAppropriate()
     {
         var path = PreferencesStore.ResolveDefaultPath();

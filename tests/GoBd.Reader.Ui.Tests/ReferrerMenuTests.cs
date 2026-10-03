@@ -115,14 +115,14 @@ public sealed class ReferrerMenuTests : HeadlessTest
         window.MouseUp(beside, MouseButton.Right);
         Dispatcher.UIThread.RunJobs();
 
-        // Offered in a menu of its own over the window, and chosen with the mouse too, so the menu
-        // closes the way it does for a person.
+        // Offered in a menu of its own over the window, among the record's actions, and chosen with
+        // the mouse too, so the menu closes the way it does for a person.
         var offered = window.GetVisualDescendants()
             .OfType<MenuFlyoutPresenter>()
             .Single()
             .GetVisualDescendants()
             .OfType<MenuItem>()
-            .Single();
+            .Single(item => (item.Header as string)?.StartsWith("Records in", StringComparison.Ordinal) == true);
 
         AvaloniaHeadlessPlatform.ForceRenderTimerTick();
         var on = offered.TranslatePoint(new Point(offered.Bounds.Width / 2, offered.Bounds.Height / 2), window).ShouldNotBeNull();

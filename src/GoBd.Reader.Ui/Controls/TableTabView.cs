@@ -5,10 +5,13 @@ using Avalonia.Controls;
 using Avalonia.Controls.Templates;
 using Avalonia.Data;
 using Avalonia.Input;
+using Avalonia.Input.Platform;
 using Avalonia.Interactivity;
 using Avalonia.Layout;
+using Avalonia.LogicalTree;
 using Avalonia.Markup.Xaml.MarkupExtensions;
 using Avalonia.Media;
+using Avalonia.Threading;
 using Avalonia.VisualTree;
 using GoBd.Reader.Data;
 using GoBd.Reader.Ui.ViewModels;
@@ -52,19 +55,19 @@ internal sealed class TableTabView : DockPanel
     private readonly ReaderSession session;
     private readonly TableTab tab;
     private readonly Action<TableNode, RecordRow, int> follow;
-    private readonly Action<TableNode, RecordRow, Control> offerReferrers;
+    private readonly Action<TableNode, RecordRow, Control, bool> offerRecordActions;
     private readonly Action<int> step;
 
-    private readonly TextBlock subtitle = new() { Opacity = 0.75, TextWrapping = TextWrapping.Wrap };
+    private readonly TextBlock subtitle = new() { Classes = { ReaderTheme.MutedClass }, TextWrapping = TextWrapping.Wrap };
     private readonly TextBlock status = new() { TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center };
     private readonly StackPanel walkBar;
     private readonly Button previous = new();
     private readonly Button next = new();
     private readonly ContentControl body = new();
 
-    private readonly TextBlock filtersRowLabel = new() { Opacity = 0.75, VerticalAlignment = VerticalAlignment.Center };
-    private readonly TextBlock sortRowLabel = new() { Opacity = 0.75, VerticalAlignment = VerticalAlignment.Center };
-    private readonly TextBlock figuresRowLabel = new() { Opacity = 0.75, VerticalAlignment = VerticalAlignment.Center };
+    private readonly TextBlock filtersRowLabel = new() { Classes = { ReaderTheme.MutedClass }, VerticalAlignment = VerticalAlignment.Center };
+    private readonly TextBlock sortRowLabel = new() { Classes = { ReaderTheme.MutedClass }, VerticalAlignment = VerticalAlignment.Center };
+    private readonly TextBlock figuresRowLabel = new() { Classes = { ReaderTheme.MutedClass }, VerticalAlignment = VerticalAlignment.Center };
 
     private readonly Button addFilterButton;
     private readonly Button addSortButton;
@@ -75,12 +78,18 @@ internal sealed class TableTabView : DockPanel
     private readonly WrapPanel figures = new() { Orientation = Orientation.Horizontal, ItemSpacing = 6, LineSpacing = 4 };
     private readonly TextBlock banner = new() { TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center };
     private readonly Button reset = new();
-    private readonly TextBlock preparing = new() { Opacity = 0.75, IsVisible = false, VerticalAlignment = VerticalAlignment.Center };
+    private readonly TextBlock preparing = new() { Classes = { ReaderTheme.MutedClass }, IsVisible = false, VerticalAlignment = VerticalAlignment.Center };
     private readonly TextBlock notice = new() { TextWrapping = TextWrapping.Wrap, IsVisible = false, FontStyle = FontStyle.Italic };
     private readonly StackPanel figuresPanel = new() { Orientation = Orientation.Horizontal, Spacing = 18 };
     private readonly Border figuresStrip;
 
     private TableView? grid;
+
+    /// <summary>The strip above the records: what is in force, what was said, the walk.</summary>
+    private readonly StackPanel toolbar;
+
+    /// <summary>Whether this tab has announced that its table is still being read.</summary>
+    private bool saidNotReady;
 
     /// <summary>The figures last shown, so a change of language can say them again.</summary>
     private IReadOnlyList<FigureReading> figureReadings = [];
@@ -89,14 +98,18 @@ internal sealed class TableTabView : DockPanel
     /// <param name="session">The open export.</param>
     /// <param name="tab">This table's place in the workspace.</param>
     /// <param name="follow">Called with the table, record and column a reference was followed from.</param>
-    /// <param name="offerReferrers">Called to offer the tables referring to a record.</param>
+    /// <param name="offerRecordActions">
+    /// Called to offer what can be done with a record — the keys it can follow, the tables that
+    /// refer to it, copying it — next to the control given, and whether it was asked for from the
+    /// keyboard.
+    /// </param>
     /// <param name="step">Called to move one referring record backwards or forwards.</param>
     /// <param name="language">The language the tab speaks until told otherwise.</param>
     public TableTabView(
         ReaderSession session,
         TableTab tab,
         Action<TableNode, RecordRow, int> follow,
-        Action<TableNode, RecordRow, Control> offerReferrers,
+        Action<TableNode, RecordRow, Control, bool> offerRecordActions,
         Action<int> step,
         ReportLanguage language = ReportLanguage.English)
     {
@@ -106,7 +119,7 @@ internal sealed class TableTabView : DockPanel
         this.session = session;
         this.tab = tab;
         this.follow = follow;
-        this.offerReferrers = offerReferrers;
+        this.offerRecordActions = offerRecordActions;
         this.step = step;
         this.language = language;
 
@@ -129,14 +142,14 @@ internal sealed class TableTabView : DockPanel
             Child = figuresPanel,
             IsVisible = false,
         };
-        figuresStrip[!Border.BorderBrushProperty] = new DynamicResourceExtension(ReaderTheme.Border);
+        figuresStrip[!Border.BorderBrushProperty] = new DynamicResourceExtension(ReaderTheme.SurfaceBorder);
         figuresStrip[!Border.BackgroundProperty] = new DynamicResourceExtension(ReaderTheme.Background);
 
         addFilterButton = Adds(() => FilterEditor());
         addSortButton = Adds(() => SortEditor());
         addFigureButton = Adds(() => FigureEditor());
 
-        var header = new StackPanel
+        var header = toolbar = new StackPanel
         {
             Orientation = Orientation.Vertical,
             Spacing = 4,
@@ -177,6 +190,86 @@ internal sealed class TableTabView : DockPanel
     /// <summary>The table this tab shows.</summary>
     public TableNode Table => tab.Table;
 
+    /// <summary>The strip above the records, which F6 moves focus to.</summary>
+    internal Control Toolbar => toolbar;
+
+    /// <summary>Where the records, or what stands instead of them, are shown.</summary>
+    internal Control RecordsArea => body;
+
+    /// <summary>Whether the table shows its data, so that something can be asked of it.</summary>
+    internal bool HasData => session.View(tab.Table).Kind == TableViewKind.Data;
+
+    /// <summary>Whether the table is shown as the file delivers it, with nothing in force.</summary>
+    internal bool InFileOrder => tab.Query.IsFileOrder;
+
+    /// <summary>Moves keyboard focus to the strip above the records.</summary>
+    internal void FocusToolbar() => addFilterButton.Focus(NavigationMethod.Directional);
+
+    /// <summary>Opens the filter editor, as its button does.</summary>
+    internal void OpenFilterEditor() => Open(addFilterButton);
+
+    /// <summary>Opens the sort editor, as its button does.</summary>
+    internal void OpenSortEditor() => Open(addSortButton);
+
+    /// <summary>Opens the figure editor, as its button does.</summary>
+    internal void OpenFigureEditor() => Open(addFigureButton);
+
+    /// <summary>The record the grid is positioned at, or none.</summary>
+    internal long? CurrentOrdinal => (grid?.SelectedItem as RecordRow)?.Ordinal;
+
+    /// <summary>
+    /// Asks for a record number and hands it to whoever goes there, which says whether the table
+    /// holds such a record.
+    /// </summary>
+    /// <remarks>
+    /// The number is read as the display language writes numbers, so "1.234" is a thousand and
+    /// more in German. A number the table does not hold is said where it was typed, and the table
+    /// stays where it was. See the improve-reader-accessibility change's design.md D12.
+    /// </remarks>
+    internal void AskForRecord(Func<long, bool> goTo)
+    {
+        ArgumentNullException.ThrowIfNull(goTo);
+
+        var count = session.View(tab.Table).Rows?.Count ?? 0;
+        var field = new TextBox { Width = 200 };
+        AutomationProperties.SetName(field, UiText.RecordNumberField(language));
+        var complaint = Complaint();
+        var go = new Button { Content = UiText.GoTo(language), Classes = { ApplyClass } };
+        var content = Editor(
+            UiText.GoToRecordHeading(language),
+            field,
+            new TextBlock { Text = UiText.RecordRange(language, count), Classes = { ReaderTheme.MutedClass }, TextWrapping = TextWrapping.Wrap },
+            complaint,
+            go);
+
+        var flyout = OpenEditor(subtitle, content, () => FocusRecords());
+        go.Click += (_, _) =>
+        {
+            var typed = (field.Text ?? string.Empty).Trim();
+            if (ReadRecordNumber(typed, language) is { } ordinal && goTo(ordinal))
+            {
+                complaint.IsVisible = false;
+                flyout.Hide();
+                return;
+            }
+
+            Complain(complaint, UiText.NoSuchRecord(language, typed, count));
+        };
+    }
+
+    /// <summary>A record number as the display language writes it, or none when it is not one.</summary>
+    internal static long? ReadRecordNumber(string typed, ReportLanguage language)
+    {
+        var groups = NumberFormatInfo.GetInstance(UiText.Numbers(language)).NumberGroupSeparator;
+        var digits = typed.Replace(groups, string.Empty, StringComparison.Ordinal).Replace(" ", string.Empty, StringComparison.Ordinal);
+        return long.TryParse(digits, NumberStyles.None, CultureInfo.InvariantCulture, out var number) ? number : null;
+    }
+
+    /// <summary>Shows the table as the file delivers it again, as the button beside the banner does.</summary>
+    internal void ReturnToFileOrder() => Ask(TableQuery.FileOrder);
+
+    private static void Open(Button adder) => adder.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+
     /// <summary>
     /// Asked to show this table under a different query, and told what came of it.
     /// </summary>
@@ -185,6 +278,9 @@ internal sealed class TableTabView : DockPanel
     /// the store, which is the window. Set after construction, so a tab can be built without one.
     /// </remarks>
     public Func<TableQuery, Task>? Asked { get; set; }
+
+    /// <summary>Told what to announce to assistive technology, and whether it interrupts.</summary>
+    public Action<string, bool>? Announce { get; set; }
 
     /// <summary>Asked to compute the figures a person has chosen for this table.</summary>
     public Func<IReadOnlyList<ColumnFigure>, Task>? Totalled { get; set; }
@@ -247,6 +343,14 @@ internal sealed class TableTabView : DockPanel
     {
         var view = session.View(tab.Table);
         var building = grid is null;
+
+        // Said once while the tab shows it, not on every progress tick that refreshes the tab.
+        if (view.Kind == TableViewKind.NotReady && !saidNotReady && Announce is { } announce)
+        {
+            saidNotReady = true;
+            announce(UiText.TableNotReady(language), false);
+        }
+
         if (building)
         {
             body.Content = view.Kind switch
@@ -312,7 +416,6 @@ internal sealed class TableTabView : DockPanel
             figuresPanel.Children.Add(new TextBlock
             {
                 Text = $"{name} {Named(reading.Asked.Figure)} {Stated(reading, layout, column)}",
-                Opacity = 0.9,
             });
         }
 
@@ -461,18 +564,15 @@ internal sealed class TableTabView : DockPanel
     /// <summary>Something in force, with a way to take it off again.</summary>
     private Control Chip(string text, Action remove)
     {
-        var close = new Button
+        var close = ReaderTheme.Glyph(new Button
         {
             Content = "✕",
             FontSize = 10,
             Padding = new Thickness(4, 1),
             MinWidth = 0,
             MinHeight = 0,
-            Background = Brushes.Transparent,
-            BorderThickness = default,
-            Opacity = 0.7,
             VerticalAlignment = VerticalAlignment.Center,
-        };
+        });
         AutomationProperties.SetName(close, UiText.RemoveChip(language, text));
 
         close.Click += (_, _) => remove();
@@ -498,8 +598,8 @@ internal sealed class TableTabView : DockPanel
                 },
             },
         };
-        border[!Border.BackgroundProperty] = new DynamicResourceExtension(ReaderTheme.PrimaryLight);
-        border[!Border.BorderBrushProperty] = new DynamicResourceExtension(ReaderTheme.Border);
+        border[!Border.BackgroundProperty] = new DynamicResourceExtension(ReaderTheme.Chip);
+        border[!Border.BorderBrushProperty] = new DynamicResourceExtension(ReaderTheme.SurfaceBorder);
         return border;
     }
 
@@ -530,17 +630,78 @@ internal sealed class TableTabView : DockPanel
         };
     }
 
+    /// <summary>
+    /// A button that opens an editor in a flyout of its own, drawn at the reader's zoom.
+    /// </summary>
+    /// <remarks>
+    /// The editor's first input takes focus when it opens, so it can be filled in from the keyboard
+    /// at once, and Enter applies it. Closed — Escape closes it — it gives focus back to the button
+    /// that opened it, unless the person has put focus somewhere else in the meantime. See the
+    /// improve-reader-accessibility change's design.md D17.
+    /// </remarks>
+    /// <summary>The class an editor's Apply button carries, which Enter presses.</summary>
+    private const string ApplyClass = "apply";
+
     private static Button Adds(Func<Control> editor)
     {
         var button = new Button { Padding = new Thickness(8, 2) };
         button.Click += (_, _) =>
-        {
-            var flyout = new Flyout { Content = editor() };
-            button.Flyout = flyout;
-            flyout.ShowAt(button);
-        };
+            button.Flyout = OpenEditor(button, editor(), () => button.Focus(NavigationMethod.Directional));
 
         return button;
+    }
+
+    /// <summary>
+    /// Opens an editor in a flyout of its own beside a control, drawn at the reader's zoom.
+    /// </summary>
+    /// <remarks>
+    /// The editor's first input takes focus when it opens, so it can be filled in from the keyboard
+    /// at once, and Enter applies it — once the picker or field it was pressed in has not taken it
+    /// itself; a default button does not reach a flyout. Closed — Escape closes it — it gives focus
+    /// back, unless the person has put focus somewhere else in the meantime.
+    /// </remarks>
+    /// <param name="anchor">What the flyout opens beside.</param>
+    /// <param name="content">The editor.</param>
+    /// <param name="giveFocusBack">Where focus goes when the editor closes.</param>
+    private static Flyout OpenEditor(Control anchor, Control content, Action giveFocusBack)
+    {
+        // Drawn at the reader's zoom: a popup is not inside the window that zooms.
+        var flyout = new Flyout { Content = new Zoomed(content), Placement = PlacementMode.BottomEdgeAlignedLeft };
+
+        // The keyboard stays in the editor: back on a picker once its list closes, and Tab going
+        // round its own controls rather than out of it.
+        ReaderWindows.KeepFocusOnPickers(content);
+        KeyboardNavigation.SetTabNavigation(content, KeyboardNavigationMode.Cycle);
+
+        content.AddHandler(KeyDownEvent, (_, args) =>
+        {
+            if (args.Key == Key.Enter
+                && args.KeyModifiers == KeyModifiers.None
+                && content.GetLogicalDescendants().OfType<Button>().FirstOrDefault(candidate => candidate.Classes.Contains(ApplyClass)) is { IsEffectivelyEnabled: true } apply)
+            {
+                args.Handled = true;
+                apply.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            }
+        });
+
+        flyout.Opened += (_, _) => Dispatcher.UIThread.Post(
+            () => content.GetVisualDescendants()
+                .OfType<InputElement>()
+                .FirstOrDefault(input => input.Focusable && input.IsEffectivelyVisible && input.IsEffectivelyEnabled)
+                ?.Focus(NavigationMethod.Tab),
+            DispatcherPriority.Loaded);
+
+        flyout.Closed += (_, _) =>
+        {
+            var focused = TopLevel.GetTopLevel(anchor)?.FocusManager?.GetFocusedElement() as Visual;
+            if (focused is null || TopLevel.GetTopLevel(focused) is null || content.IsVisualAncestorOf(focused))
+            {
+                giveFocusBack();
+            }
+        };
+
+        flyout.ShowAt(anchor);
+        return flyout;
     }
 
     /// <summary>
@@ -552,6 +713,7 @@ internal sealed class TableTabView : DockPanel
         var names = session.View(tab.Table).Columns;
         var capabilities = session.Capabilities(tab.Table);
         var picker = new ComboBox { MinWidth = 160 };
+        AutomationProperties.SetName(picker, UiText.ColumnField(language));
 
         for (var index = 0; index < names.Count; index++)
         {
@@ -572,11 +734,22 @@ internal sealed class TableTabView : DockPanel
     private static int? Chosen(ComboBox picker) =>
         (picker.SelectedItem as ComboBoxItem)?.Tag as int?;
 
+    /// <summary>
+    /// Says why an editor refused what it was given, where it was typed and to assistive
+    /// technology at once, which interrupts: the person is waiting on the answer.
+    /// </summary>
+    private void Complain(TextBlock complaint, string text)
+    {
+        complaint.Text = text;
+        complaint.IsVisible = true;
+        Announce?.Invoke(text, true);
+    }
+
     /// <summary>Where an editor says why it refused what it was given.</summary>
     private static TextBlock Complaint()
     {
         var complaint = new TextBlock { TextWrapping = TextWrapping.Wrap, IsVisible = false };
-        complaint[!TextBlock.ForegroundProperty] = new DynamicResourceExtension(ReaderTheme.Danger);
+        complaint[!TextBlock.ForegroundProperty] = new DynamicResourceExtension(ReaderTheme.Defective);
         return complaint;
     }
 
@@ -594,10 +767,13 @@ internal sealed class TableTabView : DockPanel
         var comparison = new ComboBox { MinWidth = 140 };
         var first = new TextBox { Width = 160, PlaceholderText = UiText.ValuePlaceholder(language) };
         var second = new TextBox { Width = 160, PlaceholderText = UiText.AndPlaceholder(language), IsVisible = false };
+        AutomationProperties.SetName(comparison, UiText.ComparisonField(language));
+        AutomationProperties.SetName(first, UiText.ValueField(language));
+        AutomationProperties.SetName(second, UiText.SecondValueField(language));
         var ignoreCase = new CheckBox { Content = UiText.IgnoreCase(language), IsVisible = false };
-        var expected = new TextBlock { Opacity = 0.75, TextWrapping = TextWrapping.Wrap };
+        var expected = new TextBlock { Classes = { ReaderTheme.MutedClass }, TextWrapping = TextWrapping.Wrap };
         var complaint = Complaint();
-        var apply = new Button { Content = UiText.Apply(language), IsEnabled = false };
+        var apply = new Button { Content = UiText.Apply(language), IsEnabled = false, Classes = { ApplyClass } };
 
         var layout = RecordLayout.For(tab.Table);
         var capabilities = session.Capabilities(tab.Table);
@@ -643,8 +819,7 @@ internal sealed class TableTabView : DockPanel
                 var reading = FilterInput.For(capability, layout.Columns[index], layout, typed, language);
                 if (!reading.Read)
                 {
-                    complaint.Text = UiText.IsNot(language, typed, reading.Expected);
-                    complaint.IsVisible = true;
+                    Complain(complaint, UiText.IsNot(language, typed, reading.Expected));
                     return;
                 }
 
@@ -656,10 +831,9 @@ internal sealed class TableTabView : DockPanel
             {
                 // Refused rather than applied as nothing: a filter naming no value would either
                 // show every record or none, and the banner would name it either way.
-                complaint.Text = chosen == FilterComparison.OneOf
+                Complain(complaint, chosen == FilterComparison.OneOf
                     ? UiText.ExpectsValues(language)
-                    : UiText.ExpectsValue(language);
-                complaint.IsVisible = true;
+                    : UiText.ExpectsValue(language));
                 return;
             }
 
@@ -748,12 +922,13 @@ internal sealed class TableTabView : DockPanel
     {
         var columns = Columns(_ => true);
         var direction = new ComboBox { MinWidth = 140 };
+        AutomationProperties.SetName(direction, UiText.DirectionField(language));
         direction.Items.Add(new ComboBoxItem { Content = UiText.Ascending(language), Tag = Ordering.Ascending });
         direction.Items.Add(new ComboBoxItem { Content = UiText.Descending(language), Tag = Ordering.Descending });
         direction.SelectedIndex = 0;
 
         var complaint = Complaint();
-        var apply = new Button { Content = UiText.Apply(language) };
+        var apply = new Button { Content = UiText.Apply(language), Classes = { ApplyClass } };
 
         apply.Click += (_, _) =>
         {
@@ -766,8 +941,7 @@ internal sealed class TableTabView : DockPanel
             {
                 // Refused rather than dropping one silently: a person who cannot see which sort
                 // went cannot tell what they are looking at.
-                complaint.Text = UiText.SortsFull(language, TableQuery.MaximumSorts);
-                complaint.IsVisible = true;
+                Complain(complaint, UiText.SortsFull(language, TableQuery.MaximumSorts));
                 return;
             }
 
@@ -784,7 +958,8 @@ internal sealed class TableTabView : DockPanel
     {
         var columns = Columns(_ => true);
         var figure = new ComboBox { MinWidth = 140 };
-        var apply = new Button { Content = UiText.Apply(language), IsEnabled = false };
+        AutomationProperties.SetName(figure, UiText.FigureField(language));
+        var apply = new Button { Content = UiText.Apply(language), IsEnabled = false, Classes = { ApplyClass } };
         var capabilities = session.Capabilities(tab.Table);
 
         columns.SelectionChanged += (_, _) =>
@@ -862,15 +1037,65 @@ internal sealed class TableTabView : DockPanel
     }
 
     /// <summary>Brings the record this tab is positioned at back into view.</summary>
-    public void Position()
+    /// <param name="focus">
+    /// Whether the record should also take keyboard focus, as it should when a navigation reached
+    /// it: someone following a reference from the keyboard has to arrive where the navigation did.
+    /// </param>
+    public void Position(bool focus = false)
     {
-        if (grid is null || tab.Position < 0)
+        if (grid is not null && tab.Position >= 0)
         {
-            return;
+            grid.SelectedIndex = tab.Position;
+            grid.ScrollIntoView(tab.Position);
         }
 
-        grid.SelectedIndex = tab.Position;
-        grid.ScrollIntoView(tab.Position);
+        if (focus)
+        {
+            FocusRecords();
+        }
+    }
+
+    /// <summary>
+    /// Moves keyboard focus to the record this tab is positioned at, or to what it shows instead
+    /// of records.
+    /// </summary>
+    /// <remarks>
+    /// Posted, because the row has to be realised before it can take focus, and the grid realises
+    /// it only once it has been laid out at that position.
+    /// </remarks>
+    public void FocusRecords()
+    {
+        Dispatcher.UIThread.Post(
+            () =>
+            {
+                if (grid is null)
+                {
+                    (body.Content as Control)?.Focus(NavigationMethod.Directional);
+                    return;
+                }
+
+                var index = tab.Position >= 0 ? tab.Position : Math.Max(grid.SelectedIndex, 0);
+                if (grid.ItemCount == 0)
+                {
+                    grid.Focus(NavigationMethod.Directional);
+                    return;
+                }
+
+                // Selected as well as focused: the selection is what the tab remembers its place by,
+                // and a focused row that is not selected would be forgotten on leaving the tab.
+                grid.SelectedIndex = index;
+                grid.ScrollIntoView(index);
+                grid.UpdateLayout();
+                if (grid.ContainerFromIndex(index) is { } row)
+                {
+                    row.Focus(NavigationMethod.Directional);
+                }
+                else
+                {
+                    grid.Focus(NavigationMethod.Directional);
+                }
+            },
+            DispatcherPriority.Loaded);
     }
 
     /// <summary>Remembers where the grid is, so returning to this tab finds the same record.</summary>
@@ -905,6 +1130,8 @@ internal sealed class TableTabView : DockPanel
         // it is not.
         var table = new TableView { ItemsSource = tab.Rows ?? view.Rows };
         table.AddHandler(PointerReleasedEvent, OnPointerReleased, RoutingStrategies.Tunnel);
+        table.AddHandler(KeyDownEvent, OnRecordsKey, RoutingStrategies.Tunnel);
+        table.ContainerPrepared += (_, args) => NameRecord(args.Container, view.Columns);
         table.ContextRequested += OnContextRequested;
 
         // Compiled bindings rather than property paths: a path is resolved by reflection when the
@@ -955,6 +1182,35 @@ internal sealed class TableTabView : DockPanel
     }
 
     /// <summary>
+    /// Names a row for assistive technology: its record number, and each value under its column's
+    /// name, with a value that refers to nothing marked as the grid marks it.
+    /// </summary>
+    /// <remarks>
+    /// The grid is a list to a screen reader rather than a table, so without this a row announced
+    /// nothing, or the name of a type. Set as each row is prepared, which is also when a row is
+    /// reused for another record. See the improve-reader-accessibility change's design.md D15.
+    /// </remarks>
+    private void NameRecord(Control container, IReadOnlyList<string> columns)
+    {
+        if (container.DataContext is not RecordRow row)
+        {
+            return;
+        }
+
+        var values = new List<string>(row.Values.Count);
+        for (var index = 0; index < row.Values.Count; index++)
+        {
+            var name = index < columns.Count ? columns[index] : string.Empty;
+            var value = row.Values[index];
+            values.Add(row.RefersToNothing(index)
+                ? $"{name} {value} ({UiText.RefersToNothingMark(language)})"
+                : $"{name} {value}");
+        }
+
+        AutomationProperties.SetName(container, UiText.RecordName(language, row.Ordinal, string.Join(", ", values)));
+    }
+
+    /// <summary>
     /// A followable cell: link coloured, a hand cursor, and the table it leads to in its tooltip.
     /// </summary>
     /// <remarks>
@@ -974,19 +1230,19 @@ internal sealed class TableTabView : DockPanel
                     return new TextBlock();
                 }
 
+                // Coloured by class, so the row's selection can recolour it. See ReaderTheme.
                 var dangling = row.RefersToNothing(index);
-                var text = new TextBlock
+                return new TextBlock
                 {
                     Text = row.Values[index],
                     Cursor = HandCursor,
                     TextDecorations = dangling ? TextDecorations.Strikethrough : TextDecorations.Underline,
                     VerticalAlignment = VerticalAlignment.Center,
+                    Classes = { dangling ? ReaderTheme.DanglingClass : ReaderTheme.LinkClass },
                     [ToolTip.TipProperty] = dangling
                         ? UiText.RefersToNothing(language, leads)
                         : UiText.FollowsTo(language, leads),
                 };
-                text[!TextBlock.ForegroundProperty] = new DynamicResourceExtension(dangling ? ReaderTheme.Danger : ReaderTheme.Primary);
-                return text;
             },
             supportsRecycling: true);
     }
@@ -1023,7 +1279,9 @@ internal sealed class TableTabView : DockPanel
             });
         }
 
-        return new ScrollViewer { Content = list };
+        var report = new ScrollViewer { Content = list, Focusable = true };
+        AutomationProperties.SetName(report, UiText.FindingsOf(language, tab.Table.Identity));
+        return report;
     }
 
     /// <summary>
@@ -1060,22 +1318,115 @@ internal sealed class TableTabView : DockPanel
         follow(tab.Table, row, index);
     }
 
-    /// <summary>Offers the tables whose records refer to the record a context was asked for on.</summary>
+    /// <summary>Offers what can be done with the record a context was asked for on.</summary>
     /// <remarks>
     /// Found from the row rather than the cell, so asking beside a record's values offers that
-    /// record's referrers as surely as asking on them: a click there lands on the row, and once
+    /// record's actions as surely as asking on them: a click there lands on the row, and once
     /// went unanswered here while the grid reopened a menu built for another record.
+    /// <para>
+    /// The context keys — the Menu key, and Shift+F10 — arrive here too, as a request without a
+    /// pointer position, and are offered at the record rather than wherever the pointer was left.
+    /// </para>
     /// </remarks>
     private void OnContextRequested(object? sender, ContextRequestedEventArgs args)
     {
         if (sender is not TableView table
             || args.Source is not Visual source
-            || source.GetSelfAndVisualAncestors().OfType<TableViewRow>().FirstOrDefault()?.DataContext is not RecordRow row)
+            || source.GetSelfAndVisualAncestors().OfType<TableViewRow>().FirstOrDefault() is not { DataContext: RecordRow row } container)
         {
             return;
         }
 
         args.Handled = true;
-        offerReferrers(tab.Table, row, table);
+        var fromKeyboard = !args.TryGetPosition(table, out _);
+        offerRecordActions(tab.Table, row, fromKeyboard ? container : table, fromKeyboard);
+    }
+
+    /// <summary>
+    /// The keys the records answer themselves: Enter offers the record's actions, copy copies it,
+    /// and Left and Right scroll sideways.
+    /// </summary>
+    /// <remarks>
+    /// Enter rather than following straight away, because a record may hold several keys and be
+    /// referred to by several tables, and the person should see where each leads before going.
+    /// Left and Right scroll, because a cell cannot take focus and a table may declare fifty
+    /// columns: without them, what lies beyond the window's edge could not be reached from the
+    /// keyboard at all. See the improve-reader-accessibility change's design.md D8 and D14.
+    /// </remarks>
+    private void OnRecordsKey(object? sender, KeyEventArgs args)
+    {
+        if (sender is not TableView table)
+        {
+            return;
+        }
+
+        if (ReaderKeys.ScrollLeft.Matches(args) || ReaderKeys.ScrollRight.Matches(args))
+        {
+            args.Handled = true;
+            ScrollSideways(table, ReaderKeys.ScrollLeft.Matches(args) ? -1 : 1);
+            return;
+        }
+
+        if (Focused(table) is not { DataContext: RecordRow row } container)
+        {
+            return;
+        }
+
+        if (ReaderKeys.CopyRecord.Matches(args))
+        {
+            args.Handled = true;
+            _ = CopyRecordAsync(row);
+        }
+        else if (args.Key == Key.Enter && args.KeyModifiers == KeyModifiers.None)
+        {
+            args.Handled = true;
+            offerRecordActions(tab.Table, row, container, true);
+        }
+    }
+
+    /// <summary>How far one press of Left or Right scrolls the records sideways.</summary>
+    internal const double SidewaysStep = 64;
+
+    private static void ScrollSideways(TableView table, int direction)
+    {
+        if (table.Scroll is not { } scroll)
+        {
+            return;
+        }
+
+        var furthest = Math.Max(0, scroll.Extent.Width - scroll.Viewport.Width);
+        var x = Math.Clamp(scroll.Offset.X + (direction * SidewaysStep), 0, furthest);
+        scroll.Offset = new Vector(x, scroll.Offset.Y);
+    }
+
+    /// <summary>
+    /// Puts a record on the clipboard as a spreadsheet pastes it: its column names, and its values
+    /// as shown.
+    /// </summary>
+    internal async Task CopyRecordAsync(RecordRow row)
+    {
+        if (TopLevel.GetTopLevel(this)?.Clipboard is not { } clipboard)
+        {
+            return;
+        }
+
+        var text = RecordCopy.Text(UiText.RecordColumn(language), session.View(tab.Table).Columns, row);
+        try
+        {
+            await clipboard.SetTextAsync(text);
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            // A clipboard the platform refuses leaves the record on the screen, where it was being
+            // read; nothing here is worth taking the reader down for.
+        }
+    }
+
+    /// <summary>The row that has keyboard focus, or the selected one when the grid itself has it.</summary>
+    private static TableViewRow? Focused(TableView table)
+    {
+        var focused = TopLevel.GetTopLevel(table)?.FocusManager?.GetFocusedElement() as Visual;
+        return focused?.GetSelfAndVisualAncestors().OfType<TableViewRow>().FirstOrDefault()
+            ?? (table.SelectedIndex >= 0 ? table.ContainerFromIndex(table.SelectedIndex) as TableViewRow : null);
     }
 }
